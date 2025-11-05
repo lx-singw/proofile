@@ -1,0 +1,118 @@
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: proofile-postgres
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-proofile_dev}
+      POSTGRES_USER: ${POSTGRES_USER:-proofile_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-proofile_password}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - proofile-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-proofile_user} -d ${POSTGRES_DB:-proofile_dev}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: proofile-redis
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - proofile-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: development
+    container_name: proofile-backend
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+    volumes:
+      - ./backend:/app
+      - backend_cache:/app/.cache
+    working_dir: /app
+    env_file: .env
+    networks:
+      - proofile-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      target: development
+    container_name: proofile-frontend
+    ports:
+      - "${FRONTEND_PORT:-3000}:3000"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+      - /app/.next
+      - frontend_cache:/app/.next/cache
+    env_file:
+      - .env
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:${BACKEND_PORT:-8000}
+      - NODE_ENV=development
+      - WATCHPACK_POLLING=true
+    networks:
+      - proofile-network
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    restart: unless-stopped
+    command: npm run dev
+
+networks:
+  proofile-network:
+    driver: bridge
+    name: proofile-network
+
+volumes:
+  postgres_data:
+    name: proofile-postgres-data
+  redis_data:
+    name: proofile-redis-data
+  backend_cache:
+    name: proofile-backend-cache
+  frontend_cache:
+    name: proofile-frontend-cache

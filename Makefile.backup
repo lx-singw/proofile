@@ -1,0 +1,41 @@
+.PHONY: setup-dev start-dev stop-dev test-all lint logs status restart-dev clean
+
+setup-dev:
+	@echo "Setting up development environment..."
+	./scripts/dev/setup-dev.sh
+
+start-dev:
+	@echo "Starting development services..."
+        DOCKER_BUILDKIT=0 COMPOSE_DOCKER_CLI_BUILD=0 docker compose up -d --build	docker compose up -d --build
+
+stop-dev:
+	@echo "Stopping development services..."
+	docker compose down
+
+restart-dev:
+	@echo "Restarting all services..."
+	docker compose restart
+
+logs:
+	@echo "Tailing logs for all services..."
+	docker compose logs -f
+
+status:
+	@echo "Checking status of all running services..."
+	docker compose ps
+
+clean:
+	@echo "Stopping and removing all containers, networks, and volumes..."
+	docker compose down -v
+
+test-backend:
+	@echo "Running backend tests..."
+	docker compose exec backend poetry run pytest
+
+test-frontend:
+	@echo "Running frontend tests..."
+	docker compose exec frontend npm test
+
+lint:
+	@echo "Linting all code..."
+	pre-commit run --all-files
