@@ -1,3 +1,2 @@
-from app.api.v1.api import api_router
-
-__all__ = ["api_router"]
+# This file can be empty.
+# It marks the 'api' directory as a Python package.

@@ -1,5 +1,10 @@
+# Environments
 # Environment files
 .env
+.venv
+venv/
+.idea/
+.vscode/
 .env.*
 
 # Python
@@ -11,16 +16,23 @@ __pycache__/
 env/
 venv/
 
+# Node
 # Poetry
 .poetry-cache/
 
 # Node.js
 node_modules/
 .next/
+npm-debug.log
+yarn-error.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
+# Build artifacts
+dist/
+build/
+*.DS_Store
 # IDE / Editor specific
 .vscode/
 .idea/

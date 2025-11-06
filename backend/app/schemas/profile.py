@@ -1,12 +1,13 @@
 from pydantic import BaseModel
 from typing import Optional
 
+from pydantic import Field
+
 
 # Pydantic model for creating a profile
 class ProfileCreate(BaseModel):
-    user_id: int
-    headline: str
-    summary: Optional[str] = None
+    headline: str = Field(..., max_length=100)
+    summary: str = Field(..., max_length=500)
 
 # Pydantic model for updating a profile
 class ProfileUpdate(BaseModel):

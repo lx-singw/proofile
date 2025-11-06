@@ -1,18 +1,25 @@
+"""
+FastAPI dependencies for the application.
+
+Dependencies are used for things like getting a database session or
+getting the current authenticated user.
+"""
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from jose import JWTError
 
+# --- Core Dependencies ---
 from app.core.database import get_db
 from app.core import security
 from app.models.user import User
 from app.schemas.token import TokenData
 
-
+# --- OAuth2 Scheme ---
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/token")
 
-
+# --- Authentication Dependencies ---
 async def get_current_user(
     token: str = Depends(oauth2_scheme),
     db: AsyncSession = Depends(get_db)
@@ -36,7 +43,6 @@ async def get_current_user(
     if user is None:
         raise credentials_exception
     return user
-
 
 async def get_current_active_user(current_user: User = Depends(get_current_user)) -> User:
     if not current_user.is_active:

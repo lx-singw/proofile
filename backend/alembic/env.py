@@ -12,8 +12,8 @@ from alembic import context
 config = context.config
 
 # Set the database URL from the application settings
-from app.core.config import settings
-config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
+from app.core import database
+config.set_main_option("sqlalchemy.url", database.url.render_as_string(hide_password=False))
 
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.

@@ -11,5 +11,10 @@ class Settings(BaseSettings):
     REDIS_URL: str = "redis://redis:6379/0"
     SECRET_KEY: str = "your-secret-key-change-in-production"
     ENVIRONMENT: str = "development"
+    # Optional SQLAlchemy settings
+    SQLALCHEMY_ECHO: bool = False
+    SQLALCHEMY_POOL_SIZE: int | None = None
+    SQLALCHEMY_MAX_OVERFLOW: int | None = None
+    SQLALCHEMY_POOL_TIMEOUT: int | None = None
 
 settings = Settings()

@@ -14,7 +14,8 @@ asyncpg = "^0.30.0"
 redis = "^6.4.0"
 celery = "^5.5.3"
 python-jose = {extras = ["cryptography"], version = "^3.5.0"}
-passlib = {extras = ["bcrypt"], version = "^1.7.4"}
+passlib = {version = "==1.7.4", extras = ["bcrypt"]}
+bcrypt = "==4.0.1"
 python-multipart = "^0.0.20"
 pydantic = "^2.11.9"
 pydantic-settings = "^2.11.0"
@@ -25,7 +26,6 @@ httpx = "^0.28.1"
 python-dotenv = "^1.1.1"
 supabase = "^2.20.0"
 email-validator = "^2.3.0"
-bcrypt = "^5.0.0"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.4.2"
