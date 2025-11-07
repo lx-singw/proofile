@@ -96,9 +96,9 @@ async def login_for_access_token(
             "token_type": "bearer"
         }
         
-    # Successful logins are useful but can be noisy; use DEBUG so operators
-    # can enable them when needed without cluttering test output.
-    logger.debug("Login successful for user: %s", email)
+        # Successful logins are useful but can be noisy; use DEBUG so operators
+        # can enable them when needed without cluttering test output.
+        logger.debug("Login successful for user: %s", email)
         # On successful login, clear any failed-attempts counter
         if redis:
             try:

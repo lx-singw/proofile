@@ -35,21 +35,21 @@ async def get_current_user(
     )
     try:
         # Decode token with strict audience and expiry validation
-    # Keep token internals at DEBUG level to avoid noisy logs in production/tests
-    logger.debug("Decoding token length=%s first16=%s", len(token or ""), (token or "")[:16])
-    payload = security.decode_access_token(token)
-    logger.debug("Decoded payload keys: %s", list(payload.keys()))
+        # Keep token internals at DEBUG level to avoid noisy logs in production/tests
+        logger.debug("Decoding token length=%s first16=%s", len(token or ""), (token or "")[:16])
+        payload = security.decode_access_token(token)
+        logger.debug("Decoded payload keys: %s", list(payload.keys()))
 
-    # Extract user identifier
-    username = payload.get("sub")
-    logger.debug("Username from payload: %r", username)
+        # Extract user identifier
+        username = payload.get("sub")
+        logger.debug("Username from payload: %r", username)
         if not username:
             raise credentials_exception
 
     except JWTError as e:
         logger.debug("Token decode/validation error: %s", str(e))
         raise credentials_exception from e
-    
+
     logger.debug("Looking up user by email=%s", username)
     result = await db.execute(select(User).where(User.email == username))
     user = result.scalar_one_or_none()
@@ -59,7 +59,7 @@ async def get_current_user(
         raise credentials_exception
     return user
 
-async def get_current_active_user(current_user: User = Depends(get_current_user)) -> User:
+def get_current_active_user(current_user: User = Depends(get_current_user)) -> User:
     if not current_user.is_active:
         raise HTTPException(status_code=400, detail="Inactive user")
     return current_user
