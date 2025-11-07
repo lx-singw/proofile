@@ -16,6 +16,7 @@ from starlette.middleware.sessions import SessionMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.types import ASGIApp, Receive, Scope, Send
 import time
+from app.core.rate_limit import RateLimitMiddleware
 from urllib.parse import urlparse
 from contextlib import asynccontextmanager
 from app.core import config, database
@@ -28,6 +29,18 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup: Initialize connections
+    """
+    This context manager is used to initialize and close connections
+    to the database and Redis at application startup and shutdown.
+    
+    It logs the environment and a redacted DB URL to verify config,
+    and establishes a Redis connection if the REDIS_URL setting is set.
+    If the REDIS_URL setting is not set, it logs a warning and skips
+    establishing the Redis connection.
+    
+    After yielding, it closes any established connections when the application
+    is shut down.
+    """
     logger.info("--- Application Startup ---")
     # Log environment and a redacted DB URL to verify config
     logger.info(f"Environment: {config.settings.ENVIRONMENT}")
@@ -59,6 +72,22 @@ async def lifespan(app: FastAPI):
 # Security headers middleware
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
+        """
+        This middleware adds basic security headers to every response:
+
+        - X-Content-Type-Options: nosniff
+        - X-Frame-Options: DENY
+        - X-XSS-Protection: 1; mode=block
+        - Referrer-Policy: no-referrer
+        - Permissions-Policy: geolocation=()
+
+        Additionally, it adds a simple Server-Timing header for visibility.
+        The Server-Timing header has the format:
+        Server-Timing: app;dur=<duration in ms>
+
+        Where <duration in ms> is the time it took to serve the request in milliseconds.
+        """
+        
         start = time.time()
         response = await call_next(request)
         # Basic security headers (can be tightened for production)
@@ -82,34 +111,107 @@ if getattr(config.settings, "TRUSTED_HOSTS", None):
 app = FastAPI(title=config.settings.PROJECT_NAME, lifespan=lifespan, debug=getattr(config.settings, "DEBUG", False), middleware=middleware)
 
 # CORS configuration
-cors_origins = getattr(config.settings, "BACKEND_CORS_ORIGINS", []) or []
-if cors_origins:
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=cors_origins,
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
-        expose_headers=["*"],
-        max_age=86400,
-    )
+cors_origins = ["*"] if config.settings.ENVIRONMENT == "test" else (getattr(config.settings, "BACKEND_CORS_ORIGINS", []) or [])
+if not cors_origins:
+    cors_origins = ["http://localhost:3000", "http://localhost:8000"]  # Default development origins
+
+# Add middleware in order: CORS, rate limiting, auth middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=cors_origins,
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+    allow_headers=[
+        "Content-Type", 
+        "Authorization",
+        "Accept",
+        "Origin",
+        "X-Requested-With",
+    ],
+    expose_headers=["*"],
+    max_age=86400,
+)
+
+# Rate limiting configuration (environment-dependent)
+if config.settings.ENVIRONMENT == "test":
+    # Very high limits for tests, effectively disabling for most,
+    # but allowing specific tests to override via custom client.
+    DEFAULT_REQUESTS = 10000
+    LOGIN_REQUESTS = 10000
+    REGISTRATION_REQUESTS = 10000
+else:
+    DEFAULT_REQUESTS = config.settings.RATE_LIMIT_DEFAULT_REQUESTS
+    LOGIN_REQUESTS = config.settings.RATE_LIMIT_LOGIN_REQUESTS
+    REGISTRATION_REQUESTS = config.settings.RATE_LIMIT_REGISTRATION_REQUESTS
+
+# Define the default and specific rate limits
+RATE_LIMIT_DEFAULT = (DEFAULT_REQUESTS, config.settings.RATE_LIMIT_DEFAULT_WINDOW)
+RATE_LIMIT_CONFIG = {
+    "/api/v1/auth/token": (LOGIN_REQUESTS, config.settings.RATE_LIMIT_LOGIN_WINDOW),
+    "/api/v1/users": (REGISTRATION_REQUESTS, config.settings.RATE_LIMIT_REGISTRATION_WINDOW),
+    # Add other specific endpoints if needed
+}
 
 # Add security headers
 app.add_middleware(SecurityHeadersMiddleware)
 
+# Add rate limiting if Redis is available and not running tests
+if config.settings.REDIS_URL and config.settings.ENVIRONMENT != "test":
+    try:
+        import redis.asyncio as redis
+        app.add_middleware(
+            RateLimitMiddleware,
+            redis_url=config.settings.REDIS_URL,
+            rate_limits=RATE_LIMIT_CONFIG,
+            default_rate_limit=RATE_LIMIT_DEFAULT
+        )
+        logger.info("Rate limiting middleware enabled.")
+    except ImportError:
+        logger.warning("redis package not installed, rate limiting disabled")
+
 # API router
-app.include_router(api_router, prefix=config.settings.API_V1_STR)
+app.include_router(api_router)
 
 # Standardized exception handlers
 @app.exception_handler(HTTPException)
 async def http_exception_handler(request: Request, exc: HTTPException):
-    logger.exception(f"HTTPException caught: {exc.status_code} {exc.detail}", exc_info=exc)
+    """
+    Handles HTTPExceptions and returns a JSONResponse with the error detail.
+
+    :param request: The current request
+    :param exc: The caught HTTPException
+    :return: A JSONResponse with the error detail
+    """
+    # For client-side errors (4xx), log as info instead of exception to reduce noise.
+    if 400 <= exc.status_code < 500:
+        logger.info(f"HTTPException caught: {exc.status_code} {exc.detail}")
+    else: # For server-side errors (5xx), log the full exception.
+        logger.exception(f"HTTPException caught: {exc.status_code} {exc.detail}", exc_info=exc)
     return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
 
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
-    logger.exception("RequestValidationError caught", exc_info=exc)
-    return JSONResponse(status_code=422, content={"detail": exc.errors()})
+    # Validation errors are commonly caused by user input; log at DEBUG to
+    # avoid filling logs during normal client-side validation failures.
+    logger.debug("RequestValidationError caught: %s", exc)
+    errors = []
+    for error in exc.errors():
+        error_dict = dict(error)
+        if 'ctx' in error_dict and 'error' in error_dict['ctx']:
+            # Extract the error message from ValueError
+            if isinstance(error_dict['ctx']['error'], ValueError):
+                error_dict['msg'] = str(error_dict['ctx']['error'])
+            del error_dict['ctx']
+        
+        # Handle bytes input
+        if 'input' in error_dict and isinstance(error_dict['input'], bytes):
+            try:
+                error_dict['input'] = error_dict['input'].decode('utf-8')
+            except UnicodeDecodeError:
+                error_dict['input'] = str(error_dict['input'])
+                
+        errors.append(error_dict)
+    return JSONResponse(status_code=422, content={"detail": errors})
 
 @app.get("/health", tags=["health"])  # Lightweight readiness/liveness probe
 def health_check():
