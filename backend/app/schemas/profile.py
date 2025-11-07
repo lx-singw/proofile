@@ -9,6 +9,18 @@ from __future__ import annotations
 from typing import Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+import re
+
+
+# Regex to detect HTML tags. This is a simple check which is sufficient for
+# rejecting HTML in plain-text profile fields. We intentionally keep this
+# conservative: if any tag-like construct is present, the input is rejected.
+HTML_TAG_REGEX = re.compile(r"<[^>]+>")
+
+
+def contains_html(text: str) -> bool:
+    """Return True if the string contains HTML-like tags."""
+    return bool(HTML_TAG_REGEX.search(text))
 
 
 # --- Base Schema ---
@@ -40,6 +52,8 @@ class ProfileCreate(ProfileBase):
             raise ValueError("headline must not be empty")
         if len(v) > 100:
             raise ValueError("headline must be at most 100 characters")
+        if contains_html(v):
+            raise ValueError("headline must not contain HTML")
         return v
 
     @field_validator("summary", mode="before")
@@ -51,6 +65,8 @@ class ProfileCreate(ProfileBase):
         v = v.strip()
         if len(v) > 500:
             raise ValueError("summary must be at most 500 characters")
+        if contains_html(v):
+            raise ValueError("summary must not contain HTML")
         return v
 
 
@@ -69,6 +85,8 @@ class ProfileUpdate(ProfileBase):
             raise ValueError("headline must not be empty")
         if len(v) > 100:
             raise ValueError("headline must be at most 100 characters")
+        if contains_html(v):
+            raise ValueError("headline must not contain HTML")
         return v
 
     @field_validator("summary", mode="before")
@@ -80,6 +98,8 @@ class ProfileUpdate(ProfileBase):
         v = v.strip()
         if len(v) > 500:
             raise ValueError("summary must be at most 500 characters")
+        if contains_html(v):
+            raise ValueError("summary must not contain HTML")
         return v
 
 
