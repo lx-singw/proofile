@@ -18,7 +18,7 @@ migrate:
 
 test-backend:
 	@echo "Running backend tests..."
-	docker-compose exec backend poetry run pytest
+	docker-compose exec backend bash -c "cd /app && poetry run pytest"
 
 test-frontend:
 	@echo "Running frontend tests..."

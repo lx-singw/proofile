@@ -16,13 +16,18 @@ migrate:
 	@echo "Running database migrations..."
 	docker-compose exec backend alembic upgrade head
 
-db-shell:
-	@echo "Connecting to PostgreSQL shell..."
-	docker-compose exec postgres psql -U $$(grep POSTGRES_USER .env | cut -d '=' -f2) -d $$(grep POSTGRES_DB .env | cut -d '=' -f2)
+test-backend:
 
 test-backend:
 	@echo "Running backend tests..."
-	docker-compose exec backend poetry run pytest
+	@echo "--> Recreating test database and applying migrations..."
+	docker-compose exec -T postgres dropdb --if-exists -U proofile_user proofile_test
+	docker-compose exec -T postgres createdb -U proofile_user proofile_test
+	docker-compose exec -e DATABASE_URL="postgresql+asyncpg://proofile_user:proofile_password@postgres:5432/proofile_test" backend alembic upgrade head
+	@echo "--> Running pytest..."
+	docker-compose exec -e DATABASE_URL="postgresql+asyncpg://proofile_user:proofile_password@postgres:5432/proofile_test" backend poetry run pytest
+
+
 
 test-frontend:
 	@echo "Running frontend tests..."

@@ -7,11 +7,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import schemas
 from app.api.v1 import deps
-from app.services import user_service
+from app.services import user_service, profile_service
 
 router = APIRouter()
 
-@router.post("", response_model=schemas.UserRead, status_code=status.HTTP_201_CREATED)
 async def create_user(
     *,
     db: AsyncSession = Depends(deps.get_db),
@@ -21,7 +20,11 @@ async def create_user(
     Create a new user.
     """
     try:
-        user = await user_service.create_user(db=db, user_in=user_in)
+        # Sanitize incoming data: do not allow clients to set the role at registration.
+        user_data = user_in.model_dump()
+        user_data.pop("role", None)
+        sanitized = schemas.UserCreate(**user_data)
+        user = await user_service.create_user(db=db, user_in=sanitized)
         return user
     except IntegrityError:
         # This will be caught if the email already exists due to the unique constraint.
@@ -30,3 +33,41 @@ async def create_user(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="A user with this email already exists.",
         )
+
+@router.post("", response_model=schemas.UserRead, status_code=status.HTTP_201_CREATED)
+async def create_user_endpoint(user_in: schemas.UserCreate, db: AsyncSession = Depends(deps.get_db)):
+    return await create_user(db=db, user_in=user_in)
+
+@router.get("/me", response_model=schemas.UserRead)
+async def read_current_user(current_user: schemas.UserRead = Depends(deps.get_current_active_user)):
+    """Return the currently authenticated user's details.
+
+    This provides a stable /api/v1/users/me endpoint for frontend authService probes.
+    """
+    return current_user
+
+@router.patch("/{user_id}", response_model=schemas.UserRead)
+async def update_user(
+    user_id: int,
+    user_in: schemas.UserUpdate,
+    db: AsyncSession = Depends(deps.get_db),
+    current_user: schemas.UserRead = Depends(deps.get_current_active_user),
+):
+    """
+    Update a user's details. Only accessible by admins.
+    """
+    if current_user.role != "ADMIN":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have permission to perform this action.",
+        )
+
+    user = await user_service.get_user_by_id(db, user_id=user_id)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found.",
+        )
+
+    updated_user = await user_service.update_user(db, user=user, user_in=user_in)
+    return updated_user

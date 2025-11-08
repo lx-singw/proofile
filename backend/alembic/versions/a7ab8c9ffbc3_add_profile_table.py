@@ -1,7 +1,7 @@
 """Add profile table
 
 Revision ID: a7ab8c9ffbc3
-Revises: c375c13dbfd0
+Revises: 33b9b376d90a
 Create Date: 2025-11-03 16:05:59.072815
 
 """
@@ -11,7 +11,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision = 'a7ab8c9ffbc3'
-down_revision = 'c375c13dbfd0'
+down_revision = '33b9b376d90a'
 branch_labels = None
 depends_on = None
 

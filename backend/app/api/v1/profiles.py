@@ -1,19 +1,41 @@
-from fastapi import APIRouter, Depends, Query, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
-from typing import List, Optional
 from sqlalchemy.exc import IntegrityError
+from pathlib import Path
+from fastapi.responses import JSONResponse
+
+from app.core.file_upload import (
+    validate_file_size,
+    validate_file_extension,
+    validate_file_content,
+    save_upload_file
+)
 
 from app.api.v1 import deps
-from app.models.profile import Profile
 from app.models.user import User
 from app.services import profile_service
 from app.models.user import UserRole
-from app.schemas.profile import ProfileResponse, ProfileCreate, ProfileUpdate
+from app.schemas.profile import ProfileRead, ProfileCreate, ProfileUpdate
 
 router = APIRouter()
 
-@router.get("/me", response_model=ProfileResponse)
+# Standard error messages
+PROFILE_NOT_FOUND = "Profile not found"
+
+@router.get("/", response_model=list[ProfileRead])
+async def list_profiles(
+    skip: int = 0,
+    limit: int = 10,
+    db: AsyncSession = Depends(deps.get_db),
+    current_user: User = Depends(deps.get_current_user)
+):
+    """
+    List profiles with pagination.
+    """
+    profiles = await profile_service.get_profiles(db, skip=skip, limit=limit)
+    return profiles
+
+@router.get("/me", response_model=ProfileRead)
 async def get_my_profile(
     db: AsyncSession = Depends(deps.get_db),
     current_user: User = Depends(deps.get_current_active_user)
@@ -30,37 +52,66 @@ async def get_my_profile(
     return profile
 
 
-@router.get("/", response_model=List[ProfileResponse])
-async def read_profiles(
-    db: AsyncSession = Depends(deps.get_db),
-    skip: int = Query(0, ge=0),
-    limit: int = Query(100, ge=1)
-):
-    """
-    Retrieve a list of profiles with pagination.
-    """
-    profiles = await profile_service.get_profiles(db=db, skip=skip, limit=limit)
-    return profiles
-
-
-@router.get("/{profile_id}", response_model=ProfileResponse)
+@router.get("/{profile_id}", response_model=ProfileRead)
 async def get_profile(
     profile_id: int,
-    db: AsyncSession = Depends(deps.get_db)
+    db: AsyncSession = Depends(deps.get_db),
+    current_user: User = Depends(deps.get_current_active_user)
 ):
     """
     Get a specific profile by its ID.
+    Access is restricted to owners, admins, and employers.
     """
+    # Fetch the profile once at the beginning
     profile = await profile_service.get_profile(db, id=profile_id)
-    if profile is None:
+    if not profile:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Profile with ID {profile_id} not found"
         )
+
+    # Authorization check: Allow access only to specific roles or the owner
+    if current_user.role not in [UserRole.ADMIN, UserRole.EMPLOYER]:
+        # Check if the user is trying to access their own profile
+        if profile.user_id != current_user.id: # Use the already fetched profile
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You do not have permission to view this profile"
+            )
     return profile
 
 
-@router.patch("/{profile_id}", response_model=ProfileResponse)
+@router.post("/", response_model=ProfileRead, status_code=status.HTTP_201_CREATED)
+async def create_profile(
+    profile_data: ProfileCreate,
+    db: AsyncSession = Depends(deps.get_db),
+    current_user: User = Depends(deps.get_current_active_user)
+):
+    """
+    Create a new profile for the current authenticated user.
+    This endpoint replaces the one previously in users.py.
+    """
+    existing_profile = await profile_service.get_profile_by_user_id(db, user_id=current_user.id)
+    if existing_profile:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="A profile for this user already exists."
+        )
+
+    try:
+        new_profile = await profile_service.create_profile(
+            db=db, profile_in=profile_data, user_id=current_user.id
+        )
+        return new_profile
+    except IntegrityError: # Should be rare now, but good as a safeguard.
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="An unexpected error occurred while creating the profile."
+        )
+
+
+@router.patch("/{profile_id}", response_model=ProfileRead)
 async def update_profile(
     profile_id: int,
     profile_update: ProfileUpdate,
@@ -75,7 +126,7 @@ async def update_profile(
     if profile is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Profile with ID {profile_id} not found"
+            detail="Profile not found"
         )
 
     # Authorization check: Ensure the current user owns the profile
@@ -98,6 +149,59 @@ async def update_profile(
     return updated_profile
 
 
+@router.post("/avatar", status_code=status.HTTP_200_OK)
+async def upload_avatar(
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(deps.get_db),
+    current_user: User = Depends(deps.get_current_active_user)
+):
+    """Upload a profile avatar."""
+    # Get user's profile first
+    profile = await profile_service.get_profile_by_user_id(db, user_id=current_user.id)
+    if not profile:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Profile not found"
+        )
+
+    # Security validations
+    validate_file_size(file)
+    validate_file_extension(file.filename)
+    await validate_file_content(file)
+
+    # Prepare file path - in production this would be cloud storage
+    # For now, store in a local uploads directory
+    uploads_dir = Path("uploads/avatars")
+    file_ext = Path(file.filename).suffix
+    unique_filename = f"user_{current_user.id}_avatar{file_ext}"
+    file_path = uploads_dir / unique_filename
+
+    try:
+        # Save the file
+        await save_upload_file(file, file_path)
+        
+        # Update profile with avatar URL
+        avatar_url = f"/avatars/{unique_filename}"  # URL path, not filesystem path
+        profile.avatar_url = avatar_url
+        db.add(profile)
+        await db.commit()
+        await db.refresh(profile)
+
+        return JSONResponse(content={
+            "message": "Avatar uploaded successfully",
+            "avatar_url": avatar_url
+        })
+        
+    except Exception as e:
+        # Clean up on error
+        if file_path.exists():
+            file_path.unlink()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )
+
+
 @router.delete("/{profile_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_profile(
     profile_id: int,
@@ -112,7 +216,7 @@ async def delete_profile(
     if profile is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Profile with ID {profile_id} not found"
+            detail="Profile not found"
         )
 
     # Authorization check: Ensure the current user owns the profile
@@ -125,32 +229,3 @@ async def delete_profile(
     await profile_service.delete_profile(db=db, profile=profile)
 
     return None
-
-
-@router.post("/", response_model=ProfileResponse, status_code=status.HTTP_201_CREATED)
-async def create_profile(
-    profile_data: ProfileCreate,
-    db: AsyncSession = Depends(deps.get_db),
-    current_user: User = Depends(deps.get_current_active_user)
-):
-    """
-    Create a new profile for the current authenticated user.
-    """
-    existing_profile = await profile_service.get_profile_by_user_id(db, user_id=current_user.id)
-    if existing_profile:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="A profile for this user already exists."
-        )
-
-    try:
-        new_profile = await profile_service.create_profile(
-            db=db, profile_in=profile_data, user_id=current_user.id
-        )
-        return new_profile
-    except IntegrityError: # Should be rare now, but good as a safeguard.
-        await db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="An unexpected error occurred while creating the profile."
-        )

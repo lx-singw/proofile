@@ -4,9 +4,10 @@ Pydantic schemas for User model.
 These schemas define the data shape for API requests and responses,
 providing validation and serialization.
 """
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, ConfigDict, field_validator
 from typing import Optional
 from app.models.user import UserRole
+from app.core.security import validate_password_strength
 
 # --- Base Schema ---
 # Shared properties for all user-related schemas.
@@ -17,9 +18,17 @@ class UserBase(BaseModel):
 
 # --- Create Schema ---
 # Properties to receive via API on creation.
-# Inherits from UserBase and adds the password.
 class UserCreate(UserBase):
-    password: str = Field(..., min_length=8, max_length=72)
+    password: str = Field(..., description="Password must meet complexity requirements")
+
+    @field_validator("password")
+    def validate_password(cls, v: str) -> str:
+        validate_password_strength(v)
+        return v
+
+    @field_validator("email")
+    def normalize_email(cls, v: str) -> str:
+        return v.lower()
 
 # --- Read Schema ---
 # Properties to return via API.
@@ -27,14 +36,12 @@ class UserCreate(UserBase):
 class UserRead(UserBase):
     id: int
     is_active: bool
-
-    class Config:
-        from_attributes = True # Replaces orm_mode = True in Pydantic v2
+    model_config = ConfigDict(from_attributes=True)
 
 # --- Update Schema ---
 # Properties to receive on update. All are optional.
 class UserUpdate(BaseModel):
     email: Optional[EmailStr] = None
     full_name: Optional[str] = None
-    password: Optional[str] = None
+    password: Optional[str] = Field(None, min_length=8, max_length=72) # Add validation
     is_active: Optional[bool] = None

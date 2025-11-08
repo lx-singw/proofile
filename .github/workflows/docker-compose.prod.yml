@@ -1,0 +1,81 @@
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: proofile-postgres-prod
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data_prod:/var/lib/postgresql/data
+    networks:
+      - proofile-network-prod
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: proofile-redis-prod
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data_prod:/data
+    networks:
+      - proofile-network-prod
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+
+  backend:
+    # Replace with your actual GHCR image path
+    image: ghcr.io/your-github-username/proofile/backend:latest
+    container_name: proofile-backend-prod
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+    env_file: .env
+    networks:
+      - proofile-network-prod
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    # The production command should be the default CMD in your backend Dockerfile
+
+  frontend:
+    # Replace with your actual GHCR image path
+    image: ghcr.io/your-github-username/proofile/frontend:latest
+    container_name: proofile-frontend-prod
+    ports:
+      - "${FRONTEND_PORT:-3000}:3000"
+    env_file: .env
+    environment:
+      - NODE_ENV=production
+    networks:
+      - proofile-network-prod
+    depends_on:
+      - backend
+    restart: unless-stopped
+    # The production command should be `npm start` (as default CMD in your frontend Dockerfile)
+
+networks:
+  proofile-network-prod:
+    name: proofile-network-prod
+
+volumes:
+  postgres_data_prod:
+  redis_data_prod:

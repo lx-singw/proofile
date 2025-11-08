@@ -1,12 +1,12 @@
 # Multi-stage build for development and production
 
 # Development stage
-FROM node:22-alpine as development
+FROM mcr.microsoft.com/playwright:v1.56.1-jammy AS development
 
 WORKDIR /app
 
 # Install dependencies for node-gyp
-RUN apk add --no-cache python3 make g++
+RUN apt-get update && apt-get install -y --no-install-recommends g++ make python3 && rm -rf /var/lib/apt/lists/*
 
 # Copy package files
 COPY package*.json ./
@@ -24,7 +24,7 @@ EXPOSE 3000
 CMD ["npm", "run", "dev"]
 
 # Dependencies stage
-FROM node:22-alpine as deps
+FROM node:22-alpine AS deps
 
 WORKDIR /app
 
@@ -32,7 +32,7 @@ COPY package*.json ./
 RUN npm ci --only=production
 
 # Builder stage
-FROM node:22-alpine as builder
+FROM mcr.microsoft.com/playwright:v1.56.1-jammy AS builder
 
 WORKDIR /app
 
@@ -43,7 +43,7 @@ COPY . .
 RUN npm run build
 
 # Production stage
-FROM node:22-alpine as production
+FROM node:22-alpine AS production
 
 WORKDIR /app
 

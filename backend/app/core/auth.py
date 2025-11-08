@@ -1,11 +1,14 @@
 """
 Core authentication logic.
 """
+import logging
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from app.models.user import User
 from app.core import security
+
+logger = logging.getLogger(__name__)
 
 
 async def authenticate_user(
@@ -22,8 +25,51 @@ async def authenticate_user(
     Returns:
         The user object if authentication is successful, otherwise None.
     """
-    result = await db.execute(select(User).where(User.email == email))
-    user = result.scalar_one_or_none()
-    if not user or not security.pwd_context.verify(password, user.hashed_password):
+    """
+    Authenticate a user by email and password.
+
+    Args:
+        db: The database session
+        email: The user's email (case-insensitive)
+        password: The password to verify
+
+    Returns:
+        User object if authentication succeeds, None otherwise
+    """
+    try:
+        # Normalize email and fetch user
+        email = email.lower().strip()
+        result = await db.execute(
+            select(User).where(User.email == email).limit(1)
+        )
+        user = result.scalars().first()
+
+        if not user:
+            logger.debug("authenticate_user: no user found for email=%s", email)
+            return None
+
+        # If the user exists but is inactive, continue to verify the password
+        # to avoid timing differences that could be used for enumeration.
+        if not user.is_active:
+            logger.debug("authenticate_user: user found but inactive email=%s", email)
+            # do not return early; still verify password below and return the user
+            # so callers can distinguish inactive accounts and return a specific
+            # error message while maintaining similar timing to active accounts.
+
+        # Verify password using the security utilities
+        verified = False
+        try:
+            verified = security.verify_password(password, user.hashed_password)
+        except Exception as e:
+            logger.exception("Error verifying password for %s: %s", email, e)
+
+        logger.debug("authenticate_user: password verified=%s for email=%s", verified, email)
+
+        if not verified:
+            return None
+
+        return user
+    except Exception as e:
+        # Log the error but don't expose it to the client
+        logger.exception("Authentication error: %s", e)
         return None
-    return user

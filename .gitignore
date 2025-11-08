@@ -36,3 +36,18 @@ build/
 # IDE / Editor specific
 .vscode/
 .idea/
+
+# Snyk Security Extension - AI Rules (auto-generated)
+.github/instructions/snyk_rules.instructions.md
+
+# Playwright / test artifacts
+frontend/test-results/
+
+# Frontend end-to-end test folder (source tests should be tracked; results are ignored above)
+frontend/e2e/
+
+# Backend uploaded files (do not commit user uploads)
+backend/uploads/
+
+# Temporary test files
+*.tmp

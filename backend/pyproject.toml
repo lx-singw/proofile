@@ -20,18 +20,22 @@ python-multipart = "^0.0.20"
 pydantic = "^2.11.9"
 pydantic-settings = "^2.11.0"
 openai = "^2.0.0"
-anthropic = "^0.69.0"
+anthropic = "^0.69.0" # Consider if this is a core dependency or for specific features
 pinecone-client = "^6.0.0"
-httpx = "^0.28.1"
 python-dotenv = "^1.1.1"
 supabase = "^2.20.0"
 email-validator = "^2.3.0"
+python-magic = "^0.4.27"
+aiofiles = "^23.2.1"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.4.2"
-pytest-asyncio = "^1.2.0"
+httpx = "^0.28.1" # Moved from main dependencies
+pytest-asyncio = "^0.23.7"
 black = "^25.9.0"
 ruff = "^0.13.2"
+asgi-lifespan = "^2.1.0"
+pytest-xdist = "^3.6.1"
 
 [build-system]
 requires = ["poetry-core>=2.0.0"]

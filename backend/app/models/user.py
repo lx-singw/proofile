@@ -20,3 +20,6 @@ class User(Base, TimestampMixin):
 
     # Relationship to Profile
     profile: Mapped["Profile"] = relationship("Profile", back_populates="user", uselist=False, cascade="all, delete-orphan")
+
+    # Relationship to Jobs
+    jobs: Mapped[list["Job"]] = relationship("Job", back_populates="employer", cascade="all, delete-orphan")

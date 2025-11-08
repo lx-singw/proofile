@@ -1,13 +1,16 @@
 """
 Pydantic schemas for tokens.
 """
-from pydantic import BaseModel
+from typing import Optional
+from pydantic import BaseModel, Field
 
 
 class Token(BaseModel):
     access_token: str
-    token_type: str
+    token_type: str = "bearer"
 
 
 class TokenData(BaseModel):
-    username: str | None = None
+    username: Optional[str] = Field(None, alias="sub")
+    issuer: Optional[str] = Field(None, alias="iss")
+    audience: Optional[str] = Field(None, alias="aud")
