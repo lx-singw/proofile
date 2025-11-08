@@ -1,14 +1,12 @@
 import { http, HttpResponse } from "msw";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "";
-
 type RegistrationBody = {
   email?: string | null;
 };
 
 export const handlers = [
   // Registration success
-  http.post(`${API_URL}/api/v1/users`, async ({ request }) => {
+  http.post('*/api/v1/users', async ({ request }) => {
     const rawBody = (await request.json().catch(() => ({}))) as RegistrationBody;
     const email = typeof rawBody.email === "string" ? rawBody.email : undefined;
     if (!email) {
@@ -26,7 +24,7 @@ export const handlers = [
     return HttpResponse.json({ id: "u_123", email }, { status: 201 });
   }),
   // Login success / failure
-  http.post(`${API_URL}/api/v1/auth/token`, async ({ request }) => {
+  http.post('*/api/v1/auth/token', async ({ request }) => {
     const text = await request.text();
     const params = new URLSearchParams(text);
     const username = params.get("username");
@@ -37,7 +35,16 @@ export const handlers = [
     return HttpResponse.json({ detail: "Invalid credentials" }, { status: 401 });
   }),
   // Current user endpoint after login
-  http.get(`${API_URL}/api/v1/users/me`, () => {
+  http.get('*/api/v1/users/me', () => {
     return HttpResponse.json({ id: "u_123", email: "user@example.com" });
+  }),
+  http.get('*/api/v1/profiles/me', () => {
+    return HttpResponse.json({ detail: "Unauthorized" }, { status: 401 });
+  }),
+  http.get('*/api/v1/auth/me', () => {
+    return HttpResponse.json({ detail: "Unauthorized" }, { status: 401 });
+  }),
+  http.post('*/api/v1/auth/refresh', async () => {
+    return HttpResponse.json({ access_token: "test-refresh-token" }, { status: 200 });
   }),
 ];
