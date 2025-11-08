@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { Profile } from "@/services/profileService";
 import { Button } from "../ui/button";
 
@@ -28,11 +29,14 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ profile }) => {
       <div className="rounded-lg border bg-card p-6 shadow-sm">
         <div className="flex flex-col gap-6 md:flex-row md:items-center">
           {hasAvatar ? (
-            <img
+            <Image
               src={profile.avatar_url ?? ""}
               alt="Profile avatar"
+              width={96}
+              height={96}
               className="size-24 rounded-full object-cover"
               data-testid="profile-avatar"
+              unoptimized
             />
           ) : (
             <div

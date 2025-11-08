@@ -16,7 +16,9 @@ const gotoWithRetry = async (page: any, url: string, attempts = 3) => {
   return undefined;
 };
 
-const API_BASE_URL = process.env.E2E_API_URL ?? 'http://localhost:8000';
+// In CI / docker environment the backend is reachable at the service name 'backend'.
+// Allow overriding via E2E_API_URL for local runs.
+const API_BASE_URL = process.env.E2E_API_URL ?? process.env.BACKEND_URL ?? 'http://backend:8000';
 
 const ensureTestUser = async (email: string, password:string) => {
   const apiContext = await playwrightRequest.newContext({ baseURL: API_BASE_URL });
@@ -118,6 +120,13 @@ const UNIQUE_PREFIX = () => Math.random().toString(36).slice(2, 8);
 test.describe('Login Flow', () => {
   test.beforeEach(async ({ page, context }) => {
     await context.clearCookies();
+    page.on('console', (msg) => {
+      try {
+        console.log('[page.console]', msg.type(), msg.text());
+      } catch (e) {
+        // ignore
+      }
+    });
     page.on('request', (req) => {
       if (req.url().includes('/api/')) {
         console.log('[request]', req.method(), req.url());
@@ -132,6 +141,15 @@ test.describe('Login Flow', () => {
           preview = '';
         }
         console.log('[response]', res.status(), res.url(), preview.slice(0, 300));
+        // Also print Set-Cookie headers for auth endpoints to help debug cookie setting
+        try {
+          const headers = res.headers();
+          if (res.url().includes('/api/v1/auth/token') || res.url().includes('/api/v1/auth/refresh')) {
+            console.log('[response-headers]', res.url(), headers['set-cookie'] ?? headers);
+          }
+        } catch (e) {
+          // ignore
+        }
       }
     });
   });

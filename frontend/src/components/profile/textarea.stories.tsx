@@ -1,10 +1,9 @@
 import React from "react";
-import type { Meta, StoryObj } from "@storybook/react";
 import { Textarea } from "./textarea";
-import { Label } from "./label";
-import { ErrorMessage } from "./error-message";
+import { Label } from "../ui/label";
+import { ErrorMessage } from "../ui/error-message";
 
-const meta: Meta<typeof Textarea> = {
+const textareaStoryMeta = {
   title: "UI/Textarea",
   component: Textarea,
   parameters: {
@@ -13,17 +12,16 @@ const meta: Meta<typeof Textarea> = {
   tags: ["autodocs"],
 };
 
-export default meta;
-type Story = StoryObj<typeof Textarea>;
+export default textareaStoryMeta;
 
-export const Basic: Story = {
+export const Basic = {
   args: {
     placeholder: "Type your message here.",
     className: "w-80",
   },
 };
 
-export const WithLabel: Story = {
+export const WithLabel = {
   render: () => (
     <div className="grid w-80 gap-1.5">
       <Label htmlFor="message">Your message</Label>
@@ -32,7 +30,7 @@ export const WithLabel: Story = {
   ),
 };
 
-export const InvalidWithError: Story = {
+export const InvalidWithError = {
   render: () => (
     <div className="grid w-80 gap-1.5">
       <Label htmlFor="bio">Biography</Label>
@@ -42,7 +40,7 @@ export const InvalidWithError: Story = {
   ),
 };
 
-export const Disabled: Story = {
+export const Disabled = {
   args: {
     placeholder: "You can't type here.",
     disabled: true,

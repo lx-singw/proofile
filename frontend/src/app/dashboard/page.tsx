@@ -47,10 +47,10 @@ export default function DashboardPage() {
   const primaryName = user.full_name || user.username || user.email || "your account";
   const shouldShowEmail = Boolean(user.email && user.email !== primaryName);
 
-  if (profile === null) {
+  if (profile == null) {
     return (
       <div className="min-h-screen flex items-center justify-center p-8" data-testid="dashboard-profile-redirect">
-        <p className="text-muted-foreground">Let's create your profile to unlock the dashboard...</p>
+        <p className="text-muted-foreground">Let&apos;s create your profile to unlock the dashboard...</p>
       </div>
     );
   }

@@ -19,7 +19,6 @@ const customJestConfig = {
   transformIgnorePatterns: ['/node_modules/'],
   testPathIgnorePatterns: [
     '/node_modules/',
-    '/src/__tests__/CreateProfileForm.test.tsx$',
     '/src/__tests__/profileService.test.ts$',
   ],
 };

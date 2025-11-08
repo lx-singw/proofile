@@ -11,6 +11,7 @@ import { Input } from "../ui/input";
 import { toast } from "sonner";
 import { Textarea } from "../ui/textarea";
 import { useProfileActions } from "@/hooks/useProfile";
+import Image from "next/image";
 
 const schema = z.object({
   headline: z.string().min(2, "Headline must be at least 2 chars"),
@@ -30,6 +31,8 @@ export const EditProfileForm: React.FC<EditProfileFormProps> = ({ profile, onSuc
   const { setProfileCache, invalidateProfile } = useProfileActions();
   const optimisticToastRef = useRef<string | number | undefined>(undefined);
   const [preview, setPreview] = useState<string | null>(profile.avatar_url ?? null);
+  const isErrorResponse = (value: unknown): value is { detail?: string } =>
+    typeof value === "object" && value !== null && "detail" in value;
 
   const {
     register,
@@ -65,7 +68,7 @@ export const EditProfileForm: React.FC<EditProfileFormProps> = ({ profile, onSuc
   }, [preview]);
 
   const onSubmit = async (values: FormValues) => {
-  optimisticToastRef.current = toast.loading("Saving profile changes...");
+    optimisticToastRef.current = toast.loading("Saving profile changes...");
     const payload: UpdateProfilePayload = {
       headline: values.headline,
       summary: values.summary,
@@ -82,8 +85,10 @@ export const EditProfileForm: React.FC<EditProfileFormProps> = ({ profile, onSuc
       setPreview(updated.avatar_url ?? null);
       router.replace("/profile");
       optimisticToastRef.current = undefined;
-    } catch (e: any) {
-      const detail = e?.detail || "Failed to update profile";
+    } catch (error: unknown) {
+      const detail = isErrorResponse(error) && typeof error.detail === "string"
+        ? error.detail
+        : "Failed to update profile";
       toast.error(detail, { id: optimisticToastRef.current });
       optimisticToastRef.current = undefined;
     }
@@ -141,11 +146,14 @@ export const EditProfileForm: React.FC<EditProfileFormProps> = ({ profile, onSuc
           </label>
           <Input id="edit_avatar" type="file" accept="image/*" onChange={handleAvatarChange} />
           {preview && (
-            <img
+            <Image
               src={preview}
               alt="Avatar preview"
+              width={96}
+              height={96}
               className="mt-2 size-24 rounded-full object-cover"
               data-testid="edit-avatar-preview"
+              unoptimized
             />
           )}
         </div>

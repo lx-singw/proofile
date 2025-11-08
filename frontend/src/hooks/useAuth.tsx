@@ -1,15 +1,14 @@
 "use client";
 
 import React, { createContext, useContext, useEffect, useState } from "react";
-import authService, { LoginPayload, RegisterPayload } from "../services/authService";
+import authService, { type CurrentUser, type LoginPayload, type RegisterPayload } from "../services/authService";
 import { hydrateAccessTokenFromStorage } from "../lib/api";
 import { useRouter } from "next/navigation";
-import { QueryClient, QueryClientProvider, useQuery, useQueryClient, } from "@tanstack/react-query";
+import { QueryClient, QueryClientProvider, useQuery, useQueryClient } from "@tanstack/react-query";
 import { persistQueryClient } from "@tanstack/react-query-persist-client";
 import { createSyncStoragePersister } from "@tanstack/query-sync-storage-persister";
 
-
-type User = any | null;
+type User = CurrentUser | null;
 
 type AuthContextValue = {
   user: User;
@@ -46,7 +45,9 @@ const AuthState: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     await queryClient.invalidateQueries({ queryKey: ME_QUERY_KEY });
     await queryClient.refetchQueries({ queryKey: ME_QUERY_KEY });
     // Use replace to ensure navigation happens
-    console.log('[auth] login successful, navigating to dashboard');
+    if (process.env.NODE_ENV !== "production") {
+      console.log("[auth] login successful, navigating to dashboard");
+    }
     setTimeout(() => {
       router.replace("/dashboard");
     }, 100);
@@ -58,7 +59,9 @@ const AuthState: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     queryClient.setQueryData(ME_QUERY_KEY, null);
     await queryClient.invalidateQueries({ queryKey: ME_QUERY_KEY });
     // Use replace to ensure navigation happens
-    console.log('[auth] registration successful, navigating to login');
+    if (process.env.NODE_ENV !== "production") {
+      console.log("[auth] registration successful, navigating to login");
+    }
     setTimeout(() => {
       router.replace("/login");
     }, 100);
@@ -158,7 +161,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             } catch {
               // ignore
             }
-            return undefined as unknown as string;
+            return undefined;
           }
         },
       });
@@ -169,7 +172,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         dehydrateOptions: { shouldDehydrateQuery: shouldPersistQuery },
         maxAge: 1000 * 60 * 60, // 1 hour
       });
-    } catch (e) {
+    } catch {
       // fail-safe: ignore persistence errors
     }
   }, [queryClient]);

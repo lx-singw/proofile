@@ -7,17 +7,17 @@ type ErrorMessageProps = React.HTMLAttributes<HTMLElement> & {
 };
 
 function ErrorMessage({ as = "p", className, children, id, ...props }: ErrorMessageProps) {
-  const Comp: any = as;
-  return (
-    <Comp
-      id={id}
-      data-slot="error"
-      aria-live="polite"
-      className={cn("text-sm text-destructive mt-1", className)}
-      {...props}
-    >
-      {children}
-    </Comp>
+  const Component = as;
+  return React.createElement(
+    Component,
+    {
+      id,
+      "data-slot": "error",
+      "aria-live": "polite",
+      className: cn("text-sm text-destructive mt-1", className),
+      ...props,
+    },
+    children
   );
 }
 

@@ -1,48 +1,135 @@
-import React from 'react';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import RegistrationForm from '@/components/auth/RegistrationForm';
-import { AuthProvider } from '@/hooks/useAuth';
-import { api } from '@/lib/api';
-import AxiosMockAdapter from 'axios-mock-adapter';
+import React from "react";
+import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { toast } from "sonner";
+import RegistrationForm, { registrationSchema } from "@/components/auth/RegistrationForm";
+import { useAuth } from "@/hooks/useAuth";
 
-const mock = new AxiosMockAdapter(api);
+jest.mock("sonner", () => ({
+  toast: {
+    success: jest.fn(),
+    error: jest.fn(),
+  },
+}));
 
-function setup() {
-  render(
-    <AuthProvider>
-      <RegistrationForm />
-    </AuthProvider>
-  );
-}
+jest.mock("@/hooks/useAuth", () => ({
+  useAuth: jest.fn(),
+}));
 
-describe('RegistrationForm', () => {
+const toastMock = toast as jest.Mocked<typeof toast>;
+
+describe("RegistrationForm", () => {
+  const registerMock = jest.fn();
+  const loginMock = jest.fn();
+  const logoutMock = jest.fn();
+  const refreshMock = jest.fn();
+  const useAuthMock = useAuth as jest.MockedFunction<typeof useAuth>;
+
   beforeEach(() => {
-    mock.reset();
+    jest.clearAllMocks();
+    registerMock.mockReset();
+    loginMock.mockReset();
+    logoutMock.mockReset();
+    refreshMock.mockReset();
+    useAuthMock.mockReturnValue({
+      user: null,
+      loading: false,
+      login: loginMock,
+      register: registerMock,
+      logout: logoutMock,
+      refresh: refreshMock,
+    });
+    (window as unknown as { dataLayer?: { push?: jest.Mock } }).dataLayer = { push: jest.fn() };
   });
 
-  test('validates email and password and submits successfully', async () => {
-    mock.onGet(/\/api\/v1\/users\/me$/).reply(200, { id: 'u_me', email: 'me@example.com' });
-    mock.onPost(/\/api\/v1\/users$/).reply(201, { id: 'u_123', email: 'newuser@example.com' });
-    setup();
-  fireEvent.change(screen.getByPlaceholderText('you@example.com'), { target: { value: 'newuser@example.com' } });
-  fireEvent.change(screen.getByPlaceholderText('Optional'), { target: { value: 'New User' } });
-  fireEvent.change(screen.getByPlaceholderText('••••••••'), { target: { value: 'Password123!' } });
-    fireEvent.click(screen.getByRole('button', { name: /create account/i }));
-    await waitFor(() => {
-      // Button should revert after submit
-      expect(screen.getByRole('button', { name: /create account/i })).toBeEnabled();
-    });
+  afterEach(() => {
+    delete (window as { dataLayer?: unknown }).dataLayer;
   });
 
-  test('shows duplicate email error', async () => {
-    mock.onGet(/\/api\/v1\/users\/me$/).reply(200, { id: 'u_me', email: 'me@example.com' });
-    mock.onPost(/\/api\/v1\/users$/).reply(400, { errors: { email: ['Email already exists'] } });
-    setup();
-  fireEvent.change(screen.getByPlaceholderText('you@example.com'), { target: { value: 'duplicate@example.com' } });
-  fireEvent.change(screen.getByPlaceholderText('••••••••'), { target: { value: 'Password123!' } });
-    fireEvent.click(screen.getByRole('button', { name: /create account/i }));
+  it("submits valid data", async () => {
+    registerMock.mockResolvedValueOnce(undefined);
+
+    render(<RegistrationForm />);
+    const user = userEvent.setup();
+
+    await user.type(screen.getByLabelText("Email"), "newuser@example.com");
+    await user.type(screen.getByLabelText("Full name"), "New User");
+    await user.type(screen.getByLabelText("Password"), "Password123!");
+    await user.click(screen.getByRole("button", { name: /create account/i }));
+
     await waitFor(() => {
-      expect(screen.getByText(/email already exists/i)).toBeInTheDocument();
+      expect(registerMock).toHaveBeenCalledWith({
+        email: "newuser@example.com",
+        full_name: "New User",
+        password: "Password123!",
+      });
     });
+  expect(toastMock.success).toHaveBeenCalledWith("Account created. Please log in.");
+  });
+
+  it("prevents submit when validation fails", async () => {
+    render(<RegistrationForm />);
+    const user = userEvent.setup();
+
+    await user.type(screen.getByLabelText("Email"), "invalid");
+    await user.type(screen.getByLabelText("Password"), "short");
+    await user.click(screen.getByRole("button", { name: /create account/i }));
+
+    expect(await screen.findByText(/valid email address/i)).toBeInTheDocument();
+    expect(registerMock).not.toHaveBeenCalled();
+  });
+
+  it("shows field errors returned by the API", async () => {
+    registerMock.mockRejectedValueOnce({
+      errors: { email: ["Email already exists"] },
+    });
+
+    render(<RegistrationForm />);
+    const user = userEvent.setup();
+
+    await user.type(screen.getByLabelText("Email"), "duplicate@example.com");
+    await user.type(screen.getByLabelText("Password"), "Password123!");
+    await user.click(screen.getByRole("button", { name: /create account/i }));
+
+    expect(await screen.findByText(/email already exists/i)).toBeInTheDocument();
+  expect(toastMock.error).not.toHaveBeenCalled();
+  });
+
+  it("shows toast for generic failures", async () => {
+    registerMock.mockRejectedValueOnce({ detail: "Registration failed" });
+
+    render(<RegistrationForm />);
+    const user = userEvent.setup();
+
+    await user.type(screen.getByLabelText("Email"), "fail@example.com");
+    await user.type(screen.getByLabelText("Password"), "Password123!");
+    await user.click(screen.getByRole("button", { name: /create account/i }));
+
+    await waitFor(() => {
+  expect(toastMock.error).toHaveBeenCalledWith("Registration failed");
+    });
+  });
+});
+
+describe("registrationSchema", () => {
+  it("rejects passwords missing uppercase characters", () => {
+    const result = registrationSchema.safeParse({
+      email: "check@example.com",
+      password: "password123!",
+    });
+
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues.some((issue) => issue.message.includes("uppercase"))).toBe(true);
+    }
+  });
+
+  it("accepts valid credentials", () => {
+    const result = registrationSchema.safeParse({
+      email: "ok@example.com",
+      password: "ValidPass123!",
+    });
+
+    expect(result.success).toBe(true);
   });
 });

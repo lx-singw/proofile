@@ -3,10 +3,12 @@ import { Input } from "./input";
 import { Label } from "./label";
 import { ErrorMessage } from "./error-message";
 
-export default {
+const inputStoryMeta = {
   title: "UI/Input",
   component: Input,
 };
+
+export default inputStoryMeta;
 
 export const Basic = () => <Input placeholder="Email" />;
 

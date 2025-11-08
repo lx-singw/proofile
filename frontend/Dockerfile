@@ -11,8 +11,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends g++ make python
 # Copy package files
 COPY package*.json ./
 
-# Install dependencies
-RUN npm ci
+# Install dependencies and Snyk CLI
+RUN npm ci && npm install -g snyk
 
 # Copy application code
 COPY . .
@@ -37,7 +37,7 @@ FROM mcr.microsoft.com/playwright:v1.56.1-jammy AS builder
 WORKDIR /app
 
 COPY package*.json ./
-RUN npm ci
+RUN npm ci && npm install -g snyk
 
 COPY . .
 RUN npm run build

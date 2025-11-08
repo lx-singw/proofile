@@ -10,31 +10,38 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { ErrorMessage } from "@/components/ui/error-message";
 
-const schema = z.object({
+export const loginSchema = z.object({
   username: z.string().min(1, "Email is required").email("Enter a valid email"),
   password: z.string().min(1, "Password is required"),
 });
 
-type FormValues = z.infer<typeof schema>;
+type FormValues = z.infer<typeof loginSchema>;
 
 export default function LoginForm() {
   const { register, handleSubmit, formState: { errors, isSubmitting }, setError } = useForm<FormValues>({
-    resolver: zodResolver(schema),
+    resolver: zodResolver(loginSchema),
     mode: "onBlur",
   });
   const { login } = useAuth();
 
+  const isRecord = (value: unknown): value is Record<string, unknown> =>
+    typeof value === "object" && value !== null;
+
   const onSubmit = async (data: FormValues) => {
     try {
       await login({ username: data.username, password: data.password });
-    } catch (err: any) {
+    } catch (err: unknown) {
       // Show a generic auth error to avoid enumeration
       const generic = "Invalid email or password";
-      const fieldErrors: Record<string, string[]> | undefined = err?.errors || err?.field_errors;
-      if (fieldErrors) {
-        Object.entries(fieldErrors).forEach(([name, messages]) => {
-          const msg = Array.isArray(messages) ? messages[0] : String(messages);
-          setError(name as keyof FormValues, { type: "server", message: msg || generic });
+      const rawFieldErrors = isRecord(err)
+        ? (err["errors"] ?? err["field_errors"])
+        : undefined;
+
+      if (isRecord(rawFieldErrors)) {
+        Object.entries(rawFieldErrors).forEach(([name, messages]) => {
+          const firstMessage = Array.isArray(messages) ? messages[0] : messages;
+          const resolved = typeof firstMessage === "string" ? firstMessage : generic;
+          setError(name as keyof FormValues, { type: "server", message: resolved || generic });
         });
       } else {
         setError("username", { type: "server", message: generic });

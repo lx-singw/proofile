@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { ErrorMessage } from "@/components/ui/error-message";
 import { toast } from "sonner";
 
-const schema = z.object({
+export const registrationSchema = z.object({
   email: z.string().email("Please enter a valid email address"),
   full_name: z.string().max(120, "Keep it under 120 characters").optional(),
   password: z
@@ -24,37 +24,65 @@ const schema = z.object({
     .regex(/(?=.*[!@#$%^&*(),.?":{}|<>_+-])/, "Include a special character"),
 });
 
-type FormValues = z.infer<typeof schema>;
+type FormValues = z.infer<typeof registrationSchema>;
 
 export default function RegistrationForm() {
   const { register: registerUser } = useAuth();
+  const isRecord = (value: unknown): value is Record<string, unknown> =>
+    typeof value === "object" && value !== null;
+
+  type DataLayerEvent = Record<string, unknown>;
+  type AnalyticsWindow = Window & {
+    dataLayer?: {
+      push?: (event: DataLayerEvent) => void;
+    };
+  };
 
   const {
     register,
     handleSubmit,
     formState: { errors, isSubmitting },
     setError,
-  } = useForm<FormValues>({ resolver: zodResolver(schema), mode: "onSubmit", shouldFocusError: true });
+  } = useForm<FormValues>({ resolver: zodResolver(registrationSchema), mode: "onSubmit", shouldFocusError: true });
 
   const onSubmit = async (data: FormValues) => {
     // Debug: surface submission attempt in E2E logs
-    try { console.log('[registration] submit', { hasEmail: !!data.email, hasPassword: !!data.password }); } catch {}
+    if (process.env.NODE_ENV !== "production") {
+      try {
+        console.log("[registration] submit", { hasEmail: Boolean(data.email), hasPassword: Boolean(data.password) });
+      } catch {
+        // ignore logging issues (e.g., console disabled)
+      }
+    }
     try {
       await registerUser({ email: data.email, password: data.password, full_name: data.full_name });
       // lightweight analytics hook if present
       try {
-        (window as any)?.dataLayer?.push?.({ event: "sign_up", method: "credentials" });
+        if (typeof window !== "undefined") {
+          const analyticsWindow = window as AnalyticsWindow;
+          analyticsWindow.dataLayer?.push?.({ event: "sign_up", method: "credentials" });
+        }
       } catch {}
       toast.success("Account created. Please log in.");
       // The registerUser function should handle navigation, but let's ensure it happens
-    } catch (err: any) {
+    } catch (err: unknown) {
       // Normalize backend error shapes (detail or field errors)
-      const detail = err?.detail || err?.message;
-      const fieldErrors: Record<string, string[]> | undefined = err?.errors || err?.field_errors;
-      if (fieldErrors) {
-        Object.entries(fieldErrors).forEach(([name, messages]) => {
-          const msg = Array.isArray(messages) ? messages[0] : String(messages);
-          setError(name as keyof FormValues, { type: "server", message: msg });
+      const detail = isRecord(err)
+        ? (typeof err["detail"] === "string" ? err["detail"] : undefined) ?? (typeof err["message"] === "string" ? err["message"] : undefined)
+        : undefined;
+
+      const rawFieldErrors = isRecord(err)
+        ? (err["errors"] ?? err["field_errors"])
+        : undefined;
+
+      if (isRecord(rawFieldErrors)) {
+        Object.entries(rawFieldErrors).forEach(([name, messages]) => {
+          const firstMessage = Array.isArray(messages) ? messages[0] : messages;
+          const resolved = typeof firstMessage === "string" ? firstMessage : undefined;
+          setError(name as keyof FormValues, {
+            type: "server",
+            message: resolved ?? "Registration failed",
+          });
         });
       } else if (detail) {
         toast.error(detail);

@@ -12,6 +12,7 @@ import { toast } from "sonner";
 import { useProfileActions } from "@/hooks/useProfile";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import Image from "next/image";
 
 const schema = z.object({
   headline: z.string().min(2, "Headline must be at least 2 chars"),
@@ -38,6 +39,9 @@ export const CreateProfileForm: React.FC<CreateProfileFormProps> = ({ onSuccess 
   const optimisticToastRef = useRef<string | number | undefined>(undefined);
   const [optimisticHeadline, setOptimisticHeadline] = useState<string | null>(null);
 
+  const isErrorResponse = (value: unknown): value is { detail?: string } =>
+    typeof value === "object" && value !== null && "detail" in value;
+
   useEffect(() => {
     register("avatar");
   }, [register]);
@@ -53,7 +57,7 @@ export const CreateProfileForm: React.FC<CreateProfileFormProps> = ({ onSuccess 
   const onSubmit = async (values: FormValues) => {
     setStatus("pending");
     setOptimisticHeadline(values.headline);
-    optimisticToastRef.current = toast.loading(`Creating profile "${values.headline}"...`);
+  optimisticToastRef.current = toast.loading(`Creating profile ${values.headline}...`);
     const payload: CreateProfilePayload = {
       headline: values.headline,
       summary: values.summary,
@@ -70,8 +74,10 @@ export const CreateProfileForm: React.FC<CreateProfileFormProps> = ({ onSuccess 
       setPreview(null);
       router.replace("/profile");
       optimisticToastRef.current = undefined;
-    } catch (e: any) {
-      const detail = e?.detail || "Failed to create profile";
+    } catch (error: unknown) {
+      const detail = isErrorResponse(error) && typeof error.detail === "string"
+        ? error.detail
+        : "Failed to create profile";
       toast.error(detail, { id: optimisticToastRef.current });
       setStatus("idle");
       optimisticToastRef.current = undefined;
@@ -116,11 +122,14 @@ export const CreateProfileForm: React.FC<CreateProfileFormProps> = ({ onSuccess 
         <Label htmlFor="avatar">Avatar (Optional)</Label>
         <Input id="avatar" type="file" accept="image/*" onChange={handleAvatarChange} />
         {preview && (
-          <img
+          <Image
             src={preview}
             alt="Avatar preview"
+            width={96}
+            height={96}
             className="mt-2 size-24 rounded-full object-cover"
             data-testid="avatar-preview"
+            unoptimized
           />
         )}
       </div>
@@ -130,7 +139,7 @@ export const CreateProfileForm: React.FC<CreateProfileFormProps> = ({ onSuccess 
       <div className="h-5">
         {status === "pending" && optimisticHeadline && (
           <p data-testid="profile-status" className="text-sm text-muted-foreground animate-in fade-in-0">
-            Creating profile "{optimisticHeadline}"...
+            Creating profile {optimisticHeadline}...
           </p>
         )}
         {status === "success" && optimisticHeadline && (

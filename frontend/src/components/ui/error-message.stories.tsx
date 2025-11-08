@@ -1,10 +1,12 @@
 import React from "react";
 import { ErrorMessage } from "./error-message";
 
-export default {
+const errorMessageStoryMeta = {
   title: "UI/ErrorMessage",
   component: ErrorMessage,
 };
+
+export default errorMessageStoryMeta;
 
 export const Basic = () => (
   <ErrorMessage>Password must be at least 8 characters</ErrorMessage>

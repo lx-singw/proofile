@@ -1,10 +1,12 @@
 import React from "react";
 import { Button } from "./button";
 
-export default {
+const buttonStoryMeta = {
   title: "UI/Button",
   component: Button,
 };
+
+export default buttonStoryMeta;
 
 export const Variants = () => (
   <div className="flex gap-2 flex-wrap">

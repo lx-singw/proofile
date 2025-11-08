@@ -1,74 +1,117 @@
-import React from 'react';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import CreateProfileForm from '../components/profile/CreateProfileForm';
-import { AuthProvider } from '@/hooks/useAuth';
-import { api } from '../lib/api';
-import MockAdapter from 'axios-mock-adapter';
-import { Toaster } from 'sonner';
+import React from "react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import type { Profile } from "@/services/profileService";
+import CreateProfileForm from "../components/profile/CreateProfileForm";
 
 const replaceMock = jest.fn();
 
-jest.mock('next/navigation', () => ({
+jest.mock("next/navigation", () => ({
   useRouter: () => ({
     replace: replaceMock,
   }),
 }));
 
-const mock = new MockAdapter(api);
+jest.mock("sonner", () => {
+  const toast = {
+    loading: jest.fn().mockReturnValue("toast-id"),
+    success: jest.fn(),
+    error: jest.fn(),
+  };
+  return { __esModule: true, toast };
+});
 
-function setup(onSuccess = () => {}) {
-  // Mock URL.createObjectURL
-  global.URL.createObjectURL = jest.fn(() => 'blob:http://localhost/mock-url');
-  render(
-    <AuthProvider>
-      <CreateProfileForm onSuccess={onSuccess} />
-      <Toaster />
-    </AuthProvider>
+const { toast } = require("sonner") as {
+  toast: {
+    loading: jest.Mock;
+    success: jest.Mock;
+    error: jest.Mock;
+  };
+};
+
+const createProfileMock = jest.fn();
+
+jest.mock("@/services/profileService", () => ({
+  __esModule: true,
+  default: {
+    createProfile: (...args: unknown[]) => createProfileMock(...args),
+    getProfile: jest.fn(),
+    updateProfile: jest.fn(),
+    uploadAvatar: jest.fn(),
+  },
+}));
+
+const renderForm = (props?: Partial<React.ComponentProps<typeof CreateProfileForm>>) => {
+  const queryClient = new QueryClient();
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <CreateProfileForm {...props} />
+    </QueryClientProvider>
   );
-}
+};
 
-describe('CreateProfileForm', () => {
+describe("CreateProfileForm", () => {
   beforeEach(() => {
-    mock.reset();
-    replaceMock.mockReset();
-    // Mock a successful 'me' query for AuthProvider
-    mock.onGet(/\/api\/v1\/users\/me$/).reply(200, { id: 'u_me', email: 'me@example.com' });
+    jest.clearAllMocks();
   });
 
-  test('shows validation errors', async () => {
-    setup();
-    fireEvent.click(screen.getByTestId('submit-profile'));
-    expect(await screen.findByText('Headline must be at least 2 chars')).toBeInTheDocument();
-    expect(screen.getByText('Summary must be at least 2 chars')).toBeInTheDocument();
+  it("shows validation errors", async () => {
+    const user = userEvent.setup();
+    renderForm();
+
+    await user.click(screen.getByTestId("submit-profile"));
+
+    expect(await screen.findByText("Headline must be at least 2 chars")).toBeInTheDocument();
+    expect(screen.getByText("Summary must be at least 2 chars")).toBeInTheDocument();
   });
 
-  test('submits and shows success with redirect', async () => {
-  mock.onPost('/api/v1/profiles').reply(200, { id: 1, headline: 'Jane Doe', summary: 'A short bio.' });
+  it("submits successfully and redirects", async () => {
+    const user = userEvent.setup();
     const handleSuccess = jest.fn();
-    setup(handleSuccess);
+    const profile: Profile = {
+      id: 1,
+      headline: "Jane Doe",
+      summary: "A short bio.",
+    };
 
-  fireEvent.change(screen.getByTestId('headline'), { target: { value: 'Jane Doe' } });
-  fireEvent.change(screen.getByTestId('summary'), { target: { value: 'A short bio.' } });
+    createProfileMock.mockResolvedValue(profile);
 
-    const file = new File(['(⌐□_□)'], 'avatar.png', { type: 'image/png' });
-    const avatarInput = screen.getByLabelText('Avatar');
-    fireEvent.change(avatarInput, { target: { files: [file] } });
+    renderForm({ onSuccess: handleSuccess });
 
-    fireEvent.click(screen.getByTestId('submit-profile'));
+    await user.type(screen.getByTestId("headline"), profile.headline);
+    await user.type(screen.getByTestId("summary"), profile.summary);
+    await user.click(screen.getByTestId("submit-profile"));
 
     await waitFor(() => {
-    expect(screen.getByTestId('profile-success')).toHaveTextContent('Profile created for Jane Doe');
-    expect(handleSuccess).toHaveBeenCalledWith(expect.objectContaining({ id: 1, headline: 'Jane Doe' }));
-      expect(replaceMock).toHaveBeenCalledWith('/profile');
+      expect(createProfileMock).toHaveBeenCalledWith({
+        headline: profile.headline,
+        summary: profile.summary,
+        avatar: null,
+      });
+      expect(handleSuccess).toHaveBeenCalledWith(profile);
+      expect(replaceMock).toHaveBeenCalledWith("/profile");
+      expect(toast.success).toHaveBeenCalledWith("Profile created", { id: "toast-id" });
+      expect(screen.getByTestId("profile-success")).toHaveTextContent(
+        `Profile created for ${profile.headline}`
+      );
     });
   });
 
-  test('shows API error on submission failure', async () => {
-    mock.onPost('/api/v1/profiles').reply(500, { detail: 'Server is on fire' });
-    setup();
-    fireEvent.change(screen.getByTestId('headline'), { target: { value: 'Error User' } });
-    fireEvent.change(screen.getByTestId('summary'), { target: { value: 'Oops' } });
-    fireEvent.click(screen.getByTestId('submit-profile'));
-    expect(await screen.findByText('Server is on fire')).toBeInTheDocument();
+  it("surfaces API errors", async () => {
+    const user = userEvent.setup();
+    createProfileMock.mockRejectedValue({ detail: "Server is on fire" });
+
+    renderForm();
+
+    await user.type(screen.getByTestId("headline"), "Error User");
+    await user.type(screen.getByTestId("summary"), "Oops");
+    await user.click(screen.getByTestId("submit-profile"));
+
+    await waitFor(() => {
+      expect(toast.loading).toHaveBeenCalledWith("Creating profile Error User...");
+      expect(toast.error).toHaveBeenCalledWith("Server is on fire", { id: "toast-id" });
+      expect(replaceMock).not.toHaveBeenCalled();
+    });
   });
 });

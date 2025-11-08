@@ -26,13 +26,30 @@ const PATHS = {
   byId: (profileId: string | number) => `${PROFILE_BASE_PATH}/${profileId}`,
 };
 
+type ApiErrorShape = {
+  status?: number;
+  detail?: string;
+};
+
+const isApiError = (error: unknown): error is ApiErrorShape =>
+  typeof error === "object" && error !== null;
+
 export async function getProfile(): Promise<Profile | null> {
   try {
     return await apiRequest<Profile>({ method: "get", url: PATHS.me });
-  } catch (e: any) {
-    // If 404 or 401 (not authenticated), treat as no profile
-    if (e?.status === 404 || e?.status === 401 || e?.detail === "Not Found" || e?.detail === "Not authenticated") return null;
-    throw e;
+  } catch (error: unknown) {
+    if (isApiError(error)) {
+      const { status, detail } = error;
+      if (
+        status === 404 ||
+        status === 401 ||
+        detail === "Not Found" ||
+        detail === "Not authenticated"
+      ) {
+        return null;
+      }
+    }
+    throw error;
   }
 }
 
@@ -65,10 +82,9 @@ export async function updateProfile(profileId: string | number, payload: UpdateP
     updatedProfile = await apiRequest<Profile>({ method: "patch", url, data: profileData });
   } else {
     // If only an avatar is being changed, we need the current profile state
-    updatedProfile = await getProfile().then(p => {
-      if (!p) throw new Error("Profile not found for update");
-      return p;
-    });
+    const existingProfile = await getProfile();
+    if (!existingProfile) throw new Error("Profile not found for update");
+    updatedProfile = existingProfile;
   }
 
   // 2. If an avatar is included, upload it and return the final updated profile
@@ -90,4 +106,6 @@ export async function uploadAvatar(file: File): Promise<Profile> {
   return response.data;
 }
 
-export default { getProfile, createProfile, updateProfile, uploadAvatar };
+const profileService = { getProfile, createProfile, updateProfile, uploadAvatar };
+
+export default profileService;

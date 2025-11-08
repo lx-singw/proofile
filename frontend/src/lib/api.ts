@@ -1,13 +1,26 @@
-import axios, { AxiosRequestConfig, AxiosResponse } from "axios";
+import axios, { AxiosHeaders, type AxiosRequestConfig } from "axios";
 
 // Prefer relative '/api' which is proxied to the backend via next.config rewrites in dev/E2E.
 // If NEXT_PUBLIC_API_URL is provided and not pointing to localhost (which breaks inside container browsers), use it.
 const rawEnvUrl = process.env.NEXT_PUBLIC_API_URL;
-const API_URL = rawEnvUrl && !/localhost/i.test(rawEnvUrl) ? rawEnvUrl : "";
-if (typeof window !== 'undefined') {
-  // Lightweight one-time debug log to help diagnose E2E issues
-  // eslint-disable-next-line no-console
-  console.log('[api] baseURL resolved to', API_URL);
+// Default to empty (relative '/api') so Next's rewrites/proxy can handle same-origin cookies.
+let API_URL = rawEnvUrl && !/localhost/i.test(rawEnvUrl) ? rawEnvUrl : "";
+if (typeof window !== "undefined" && rawEnvUrl) {
+  try {
+    // If the provided NEXT_PUBLIC_API_URL points to a different hostname than the
+    // current browser origin (e.g. 'http://backend:8000' while the page is on 'localhost:3000'),
+    // prefer relative paths so cookies (CSRF) are set on the frontend origin via the proxy.
+    const envHost = new URL(rawEnvUrl).hostname;
+    if (envHost !== window.location.hostname) {
+      API_URL = "";
+    }
+  } catch {
+    // ignore URL parse errors and keep the configured API_URL
+  }
+  if (process.env.NODE_ENV !== "production") {
+    // Lightweight one-time debug log to help diagnose E2E issues
+    console.log("[api] baseURL resolved to", API_URL, "rawEnvUrl=", rawEnvUrl);
+  }
 }
 
 const ACCESS_TOKEN_STORAGE_KEY = "auth:accessToken";
@@ -97,16 +110,18 @@ export function clearAccessToken() {
 // --------------------
 api.interceptors.request.use((config) => {
   try {
-    const url = (config.url || "").toString();
+    const url = (config.url ?? "").toString();
     const isAuthPath =
       url.includes("/api/v1/auth/refresh") || url.includes("/api/v1/auth/token");
 
     // Only attach Authorization for non-auth paths and when we have a token
     if (!isAuthPath && accessToken) {
-      // Preserve existing header if the caller explicitly set it
-      const headers: any = (config.headers ?? {}) as any;
-      if (!headers["Authorization"]) {
-        headers["Authorization"] = `Bearer ${accessToken}`;
+      const headers =
+        config.headers instanceof AxiosHeaders
+          ? config.headers
+          : new AxiosHeaders(config.headers ?? {});
+      if (typeof headers.get("Authorization") !== "string") {
+        headers.set("Authorization", `Bearer ${accessToken}`);
       }
       config.headers = headers;
     }
@@ -117,14 +132,16 @@ api.interceptors.request.use((config) => {
 });
 
 // Basic wrapper to return response data and normalize errors
-export async function apiRequest<T = any>(config: AxiosRequestConfig): Promise<T> {
+export async function apiRequest<T = unknown>(config: AxiosRequestConfig): Promise<T> {
   try {
-    const resp: AxiosResponse<T> = await api.request(config);
+    const resp = await api.request<T>(config);
     return resp.data;
-  } catch (err: any) {
+  } catch (error) {
     // Normalize Axios errors to throw helpful objects
-    if (err?.response?.data) throw err.response.data;
-    throw err;
+    if (axios.isAxiosError(error) && error.response?.data !== undefined) {
+      throw error.response.data;
+    }
+    throw error;
   }
 }
 
@@ -138,7 +155,7 @@ let failedQueue: Array<{
   config: AxiosRequestConfig;
 }> = [];
 
-function processQueue(error: any | null, tokenUpdated = false) {
+function processQueue(error: unknown | null) {
   failedQueue.forEach(({ resolve, reject, config }) => {
     if (error) reject(error);
     else resolve(api.request(config));
@@ -176,35 +193,41 @@ api.interceptors.response.use(
       // This is necessary because we are using a separate axios instance that
       // might not automatically handle the XSRF token lifecycle correctly on its own.
       const getCookie = (name: string): string | null => {
-        if (typeof document === 'undefined') return null;
+        if (typeof document === "undefined") return null;
         const value = `; ${document.cookie}`;
         const parts = value.split(`; ${name}=`);
         if (parts.length === 2) return parts.pop()?.split(';').shift() || null;
         return null;
       };
-      const xsrfToken = getCookie('XSRF-TOKEN');
+      const xsrfToken = getCookie("XSRF-TOKEN");
 
       // Call refresh endpoint directly with a client that doesn't have this
       // interceptor attached to avoid recursion.
-      const resp = await refreshClient.post(
+      type RefreshResponse = {
+        access_token?: string;
+        accessToken?: string;
+        [key: string]: unknown;
+      };
+
+      const resp = await refreshClient.post<RefreshResponse>(
         "/api/v1/auth/refresh",
         {}, // No data in body
         {
           headers: {
-            ...(xsrfToken && { 'X-XSRF-TOKEN': xsrfToken }),
+            ...(xsrfToken ? { "X-XSRF-TOKEN": xsrfToken } : {}),
           },
         }
       );
       // Update in-memory token if backend returns a fresh access token in JSON
-      const newToken = resp?.data?.access_token || resp?.data?.accessToken;
-      if (newToken) setAccessToken(newToken);
+      const newToken = resp.data?.access_token ?? resp.data?.accessToken;
+      if (typeof newToken === "string" && newToken) setAccessToken(newToken);
       isRefreshing = false;
-      processQueue(null, true);
+      processQueue(null);
       // Retry the original request
       return api.request(originalRequest);
     } catch (refreshError) {
       isRefreshing = false;
-      processQueue(refreshError, false);
+      processQueue(refreshError);
       // If refresh fails, try to redirect to login in browser environments
       try {
         // Only force navigation if we previously had an access token (i.e. user was authenticated)
@@ -213,7 +236,7 @@ api.interceptors.response.use(
         if (hadToken && typeof window !== "undefined") {
           window.location.href = "/login";
         }
-      } catch (e) {
+      } catch {
         // ignore
       }
       return Promise.reject(refreshError);
