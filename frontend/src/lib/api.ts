@@ -173,6 +173,15 @@ api.interceptors.response.use(
       return Promise.reject(error);
     }
 
+    // If we do not currently hold an access token, there's nothing to refresh.
+    // This covers bootstrapping flows (unauthenticated users hitting protected
+    // endpoints) and avoids spamming the refresh endpoint without the required
+    // CSRF cookie/header handshake. In those situations, simply bubble up the
+    // 401 so callers can handle it explicitly.
+    if (!getAccessToken()) {
+      return Promise.reject(error);
+    }
+
     // Avoid retrying the refresh call itself
     if (originalRequest?._retry) {
       return Promise.reject(error);

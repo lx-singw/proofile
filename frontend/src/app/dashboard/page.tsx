@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 
 export default function DashboardPage() {
   const router = useRouter();
-  const { user, loading } = useAuth();
+  const { user, loading, logout } = useAuth();
   const { data: profile, isLoading: profileLoading } = useProfile({ enabled: Boolean(user) });
 
   useEffect(() => {
@@ -19,7 +19,20 @@ export default function DashboardPage() {
   }, [loading, user, router]);
 
   useEffect(() => {
+    if (process.env.NODE_ENV !== "production") {
+      // eslint-disable-next-line no-console
+      console.log("[dashboard] effect state", {
+        loading,
+        hasUser: Boolean(user),
+        profileLoading,
+        profile,
+      });
+    }
     if (!loading && user && !profileLoading && profile === null) {
+      if (process.env.NODE_ENV !== "production") {
+        // eslint-disable-next-line no-console
+        console.log("[dashboard] redirecting to /profile/create");
+      }
       router.replace("/profile/create");
     }
   }, [loading, user, profile, profileLoading, router]);
@@ -58,7 +71,12 @@ export default function DashboardPage() {
   return (
     <div className="min-h-screen flex items-center justify-center p-8">
       <div className="w-full max-w-2xl space-y-4">
-        <h1 className="text-3xl font-semibold">Dashboard</h1>
+        <div className="flex justify-between items-center">
+          <h1 className="text-3xl font-semibold">Dashboard</h1>
+          <Button onClick={logout} variant="outline" size="sm">
+            Sign Out
+          </Button>
+        </div>
         <p data-testid="dashboard-user" className="text-muted-foreground">
           Signed in as {primaryName}
           {shouldShowEmail ? ` (${user.email})` : ""}

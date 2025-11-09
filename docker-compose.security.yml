@@ -1,0 +1,105 @@
+version: '3.8'
+
+services:
+  # Security scanning services
+  gitleaks:
+    image: zricethezav/gitleaks:latest
+    volumes:
+      - .:/repo:ro
+    working_dir: /repo
+    command: detect --source /repo --config /repo/.gitleaks.toml --verbose
+    profiles: ["security"]
+
+  trufflehog:
+    image: trufflesecurity/trufflehog:latest
+    volumes:
+      - .:/repo:ro
+    working_dir: /repo
+    command: filesystem /repo --only-verified
+    profiles: ["security"]
+
+  trivy-frontend:
+    image: aquasec/trivy:latest
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    command: image proofile-frontend:latest
+    depends_on:
+      - frontend
+    profiles: ["security"]
+
+  trivy-backend:
+    image: aquasec/trivy:latest
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    command: image proofile-backend:latest
+    depends_on:
+      - backend
+    profiles: ["security"]
+
+  checkov:
+    image: bridgecrew/checkov:latest
+    volumes:
+      - .:/tf:ro
+    working_dir: /tf
+    command: -d /tf --framework dockerfile --framework kubernetes --framework terraform
+    profiles: ["security"]
+
+  hadolint-frontend:
+    image: hadolint/hadolint:latest
+    volumes:
+      - ./frontend/Dockerfile:/Dockerfile:ro
+    command: hadolint /Dockerfile
+    profiles: ["security"]
+
+  hadolint-backend:
+    image: hadolint/hadolint:latest
+    volumes:
+      - ./backend/Dockerfile:/Dockerfile:ro
+    command: hadolint /Dockerfile
+    profiles: ["security"]
+
+  # Security monitoring
+  snyk-frontend:
+    image: snyk/snyk:node
+    volumes:
+      - ./frontend:/app:ro
+    working_dir: /app
+    environment:
+      - SNYK_TOKEN=${SNYK_TOKEN}
+    command: test --severity-threshold=medium
+    profiles: ["security"]
+
+  snyk-backend:
+    image: snyk/snyk:python
+    volumes:
+      - ./backend:/app:ro
+    working_dir: /app
+    environment:
+      - SNYK_TOKEN=${SNYK_TOKEN}
+    command: test --severity-threshold=medium
+    profiles: ["security"]
+
+  # OSV Scanner
+  osv-scanner:
+    image: ghcr.io/google/osv-scanner:latest
+    volumes:
+      - .:/workspace:ro
+    working_dir: /workspace
+    command: --lockfile=/workspace/frontend/package-lock.json --lockfile=/workspace/backend/poetry.lock
+    profiles: ["security"]
+
+  # Semgrep SAST
+  semgrep:
+    image: returntocorp/semgrep:latest
+    volumes:
+      - .:/src:ro
+    working_dir: /src
+    environment:
+      - SEMGREP_APP_TOKEN=${SEMGREP_APP_TOKEN}
+    command: --config=auto --json --output=/tmp/semgrep-results.json
+    profiles: ["security"]
+
+networks:
+  default:
+    name: proofile-security
+    driver: bridge

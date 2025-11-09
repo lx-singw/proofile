@@ -108,6 +108,7 @@ class ProfileRead(ProfileBase):
     model_config = ConfigDict(from_attributes=True)
     id: int
     user_id: int
+    avatar_url: Optional[str] = None
 
 
 class ProfileResponse(ProfileRead):

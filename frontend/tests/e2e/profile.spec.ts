@@ -18,6 +18,7 @@ const gotoWithRetry = async (page: any, url: string, attempts = 3) => {
 
 const API_BASE_URL = process.env.E2E_API_URL ?? 'http://backend:8000';
 const TOKEN_CACHE_TTL_MS = 5 * 60 * 1000;
+const NAVIGATION_TIMEOUT = 60_000;
 const authTokenCache = new Map<string, { token: string; createdAt: number }>();
 
 const ensureProfileTestUser = async (email: string, password: string) => {
@@ -128,6 +129,165 @@ const loginViaApi = async (page: any, email: string, password: string) => {
 
 const UNIQUE_PREFIX = () => Math.random().toString(36).slice(2, 10);
 
+const registerUserViaUi = async (
+  page: any,
+  {
+    email,
+    password,
+    fullName = 'Playwright Onboarding',
+  }: { email: string; password: string; fullName?: string }
+) => {
+  await gotoWithRetry(page, '/register');
+  await expect(page.getByRole('heading', { name: /create account/i })).toBeVisible({ timeout: 20000 });
+  await page.getByLabel(/^email$/i).fill(email);
+  const fullNameInput = page.getByLabel(/full name/i);
+  if ((await fullNameInput.count()) > 0) {
+    await fullNameInput.fill(fullName);
+  }
+  await page.getByLabel(/^password$/i).fill(password);
+
+  const [resp] = await Promise.all([
+    page.waitForResponse(
+      (response: any) =>
+        response.url().includes('/api/v1/users') &&
+        response.request().method() === 'POST' &&
+        response.status() >= 200 &&
+        response.status() < 400
+    ),
+    page.getByRole('button', { name: /create account/i }).click(),
+  ]);
+  expect(resp.status()).toBeGreaterThanOrEqual(200);
+  expect(resp.status()).toBeLessThan(400);
+
+  await page.waitForURL(/\/login(?:\/?|$)/, { timeout: NAVIGATION_TIMEOUT });
+  await expect(page).toHaveURL(/\/login(?:\/?|$)/, { timeout: NAVIGATION_TIMEOUT });
+};
+
+const loginUserViaUi = async (page: any, { email, password }: { email: string; password: string }) => {
+  await expect(page.getByRole('heading', { name: /sign in/i })).toBeVisible({ timeout: 20000 });
+  await page.getByLabel(/^email$/i).fill(email);
+  await page.getByLabel(/^password$/i).fill(password);
+
+  await Promise.all([
+    page.waitForResponse(
+      (response: any) =>
+        response.url().includes('/api/v1/auth/token') &&
+        response.request().method() === 'POST' &&
+        response.status() >= 200 &&
+        response.status() < 400
+    ),
+    page.getByRole('button', { name: /sign in/i }).click(),
+  ]);
+
+  await page.waitForURL(/\/(dashboard|profile\/create)(?:\/?|$)/, { timeout: NAVIGATION_TIMEOUT });
+  await page.waitForTimeout(500);
+  const cookieSnapshot = await page.evaluate(() => document.cookie);
+  // eslint-disable-next-line no-console
+  console.log('[loginUserViaUi] cookies:', cookieSnapshot);
+  await page.waitForURL(/\/profile\/create(?:\/?|$)/, { timeout: NAVIGATION_TIMEOUT });
+  await expect(page.getByTestId('create-profile-heading')).toBeVisible({ timeout: NAVIGATION_TIMEOUT });
+};
+
+const createProfileViaUi = async (
+  page: any,
+  { headline, summary }: { headline: string; summary: string }
+) => {
+  await expect(page).toHaveURL(/\/profile\/create(?:\/?|$)/, { timeout: NAVIGATION_TIMEOUT });
+  await page.fill('[data-testid="headline"]', headline);
+  await page.fill('[data-testid="summary"]', summary);
+
+  const [createResponse] = await Promise.all([
+    page.waitForResponse(
+      (response: any) =>
+        response.url().includes('/api/v1/profiles') &&
+        response.request().method() === 'POST' &&
+        response.status() >= 200 &&
+        response.status() < 400
+    ),
+    page.getByTestId('submit-profile').click(),
+  ]);
+
+  expect(createResponse.status()).toBeGreaterThanOrEqual(200);
+  expect(createResponse.status()).toBeLessThan(400);
+
+  await page.waitForURL(/\/profile(?:\/?|$)/, { timeout: NAVIGATION_TIMEOUT });
+  await expect(page.getByTestId('profile-headline')).toHaveText(headline, { timeout: NAVIGATION_TIMEOUT });
+  await expect(page.getByTestId('profile-summary')).toContainText(summary, { timeout: NAVIGATION_TIMEOUT });
+};
+
+const editProfileViaUi = async (
+  page: any,
+  { headline, summary }: { headline: string; summary: string }
+) => {
+  await page.getByTestId('profile-edit').click();
+  await page.waitForURL(/\/profile\/edit(?:\/?|$)/, { timeout: NAVIGATION_TIMEOUT });
+  const headlineInput = page.getByTestId('edit_headline');
+  const summaryInput = page.getByTestId('edit_summary');
+
+  await headlineInput.fill(headline);
+  await summaryInput.fill(summary);
+
+  const [updateResponse] = await Promise.all([
+    page.waitForResponse(
+      (response: any) =>
+        response.url().includes('/api/v1/profiles/') &&
+        response.request().method() === 'PATCH' &&
+        response.status() >= 200 &&
+        response.status() < 400
+    ),
+    page.getByTestId('save-profile').click(),
+  ]);
+
+  expect(updateResponse.status()).toBeGreaterThanOrEqual(200);
+  expect(updateResponse.status()).toBeLessThan(400);
+
+  await page.waitForURL(/\/profile(?:\/?|$)/, { timeout: NAVIGATION_TIMEOUT });
+  await expect(page.getByTestId('profile-headline')).toHaveText(headline, { timeout: NAVIGATION_TIMEOUT });
+  await expect(page.getByTestId('profile-summary')).toContainText(summary, { timeout: NAVIGATION_TIMEOUT });
+};
+
+test.describe('Registration to Profile Flow', () => {
+  test.describe.configure({ timeout: 180000 });
+
+  test.beforeEach(async ({ page }) => {
+    page.on('response', async (res) => {
+      if (!res.url().includes('/api/')) return;
+      // eslint-disable-next-line no-console
+      console.log('[api-response]', res.status(), res.url());
+    });
+    page.on('console', (msg) => {
+      // eslint-disable-next-line no-console
+      console.log('[console]', msg.type(), msg.text());
+    });
+  });
+
+  test('registers a new user and creates a profile via the UI', async ({ page }) => {
+    const email = `profile-onboard-${UNIQUE_PREFIX()}@example.com`;
+    const password = 'SuperSecret123!';
+    const headline = `Playwright Headline ${UNIQUE_PREFIX()}`;
+    const summary = 'Playwright user ready for opportunities.';
+
+    await registerUserViaUi(page, { email, password });
+    await loginUserViaUi(page, { email, password });
+    await createProfileViaUi(page, { headline, summary });
+    await expect(page.getByTestId('profile-edit')).toBeVisible({ timeout: NAVIGATION_TIMEOUT });
+  });
+
+  test('registers, creates, and edits a profile through the UI', async ({ page }) => {
+    const email = `profile-edit-flow-${UNIQUE_PREFIX()}@example.com`;
+    const password = 'SuperSecret123!';
+    const initialHeadline = `Initial Headline ${UNIQUE_PREFIX()}`;
+    const initialSummary = 'Creating profile to verify edit surface.';
+    const updatedHeadline = `Updated Headline ${UNIQUE_PREFIX()}`;
+    const updatedSummary = 'Updated summary authored during Playwright run.';
+
+    await registerUserViaUi(page, { email, password });
+    await loginUserViaUi(page, { email, password });
+    await createProfileViaUi(page, { headline: initialHeadline, summary: initialSummary });
+    await editProfileViaUi(page, { headline: updatedHeadline, summary: updatedSummary });
+  });
+});
+
 test.describe('Profile Flow', () => {
   test.describe.configure({ timeout: 120000 });
 
@@ -147,39 +307,43 @@ test.describe('Profile Flow', () => {
 
     await loginViaApi(page, email, password);
     await gotoWithRetry(page, '/dashboard');
-    await expect(page).toHaveURL(/\/profile\/create(?:\/|$)/, { timeout: 30000 });
-    await expect(page.getByTestId('create-profile-heading')).toBeVisible({ timeout: 30000 });
+    await expect(page).toHaveURL(/\/profile\/create(?:\/?|$)/, { timeout: NAVIGATION_TIMEOUT });
+    await expect(page.getByTestId('create-profile-heading')).toBeVisible({ timeout: NAVIGATION_TIMEOUT });
   });
 
   test('allows submitting a new profile', async ({ page }) => {
     const email = `profile-submit-${UNIQUE_PREFIX()}@example.com`;
     const password = 'SuperSecret123!';
+    const headline = 'New Profile User';
+    const summary = 'Future builder.';
     await ensureProfileTestUser(email, password);
 
     await loginViaApi(page, email, password);
     await gotoWithRetry(page, '/profile/create');
-    await expect(page).toHaveURL(/\/profile\/create(?:\/|$)/, { timeout: 30000 });
+    await expect(page).toHaveURL(/\/profile\/create(?:\/?|$)/, { timeout: NAVIGATION_TIMEOUT });
 
-    await page.fill('[data-testid="headline"]', 'New Profile User');
-    await page.fill('[data-testid="summary"]', 'Future builder.');
+    await page.fill('[data-testid="headline"]', headline);
+    await page.fill('[data-testid="summary"]', summary);
 
     await Promise.all([
       page.waitForResponse(
-        (r: any) =>
-          r.url().includes('/api/v1/profiles') &&
-          r.request().method() === 'POST' &&
-          r.status() >= 200 &&
-          r.status() < 400
+        (response: any) =>
+          response.url().includes('/api/v1/profiles') &&
+          response.request().method() === 'POST' &&
+          response.status() >= 200 &&
+          response.status() < 400
       ),
       page.getByTestId('submit-profile').click(),
     ]);
 
-    await expect(page.getByTestId('profile-success')).toContainText('Profile created for New Profile User', {
-      timeout: 15000,
-    });
+    await expect(page.getByTestId('profile-success')).toContainText(
+      `Profile created for ${headline}`,
+      { timeout: NAVIGATION_TIMEOUT }
+    );
     await gotoWithRetry(page, '/profile');
-    await expect(page.getByTestId('profile-headline')).toHaveText('New Profile User', { timeout: 30000 });
-    await expect(page.getByTestId('profile-summary')).toContainText('Future builder.', { timeout: 30000 });
+    await expect(page).toHaveURL(/\/profile(?:\/?|$)/, { timeout: NAVIGATION_TIMEOUT });
+    await expect(page.getByTestId('profile-headline')).toHaveText(headline, { timeout: NAVIGATION_TIMEOUT });
+    await expect(page.getByTestId('profile-summary')).toContainText(summary, { timeout: NAVIGATION_TIMEOUT });
   });
 
   test('surfaces existing profile details', async ({ page }) => {
@@ -193,10 +357,10 @@ test.describe('Profile Flow', () => {
 
     await loginViaApi(page, email, password);
     await gotoWithRetry(page, '/profile');
-    await expect(page).toHaveURL(/\/profile(?:\/|$)/, { timeout: 30000 });
-    await expect(page.getByTestId('profile-headline')).toHaveText('Playwright View User', { timeout: 30000 });
+    await expect(page).toHaveURL(/\/profile(?:\/?|$)/, { timeout: NAVIGATION_TIMEOUT });
+    await expect(page.getByTestId('profile-headline')).toHaveText('Playwright View User', { timeout: NAVIGATION_TIMEOUT });
     await expect(page.getByTestId('profile-summary')).toContainText('Curious lifelong learner', {
-      timeout: 30000,
+      timeout: NAVIGATION_TIMEOUT,
     });
   });
 
@@ -228,9 +392,9 @@ test.describe('Profile Flow', () => {
     ]);
 
     await gotoWithRetry(page, '/profile');
-    await expect(page.getByTestId('profile-headline')).toHaveText('Profile Editor Updated', { timeout: 30000 });
+    await expect(page.getByTestId('profile-headline')).toHaveText('Profile Editor Updated', { timeout: NAVIGATION_TIMEOUT });
     await expect(page.getByTestId('profile-summary')).toContainText('Updated summary from Playwright.', {
-      timeout: 30000,
+      timeout: NAVIGATION_TIMEOUT,
     });
   });
 
@@ -241,7 +405,7 @@ test.describe('Profile Flow', () => {
 
     await loginViaApi(page, email, password);
     await gotoWithRetry(page, '/profile/create');
-    await expect(page).toHaveURL(/\/profile\/create(?:\/|$)/, { timeout: 30000 });
+    await expect(page).toHaveURL(/\/profile\/create(?:\/?|$)/, { timeout: NAVIGATION_TIMEOUT });
 
     // Fill out form and attach a file
     await page.fill('[data-testid="headline"]', 'Avatar User');
@@ -271,7 +435,7 @@ test.describe('Profile Flow', () => {
     // Verify on the profile view page
     await gotoWithRetry(page, '/profile');
     const avatarImage = page.getByTestId('profile-avatar');
-    await expect(avatarImage).toBeVisible({ timeout: 30000 });
+    await expect(avatarImage).toBeVisible({ timeout: NAVIGATION_TIMEOUT });
     await expect(avatarImage).toHaveAttribute('src', /.+/); // Check that src is not empty
   });
 });

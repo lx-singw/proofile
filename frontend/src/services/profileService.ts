@@ -21,7 +21,7 @@ export type UpdateProfilePayload = Partial<CreateProfilePayload>;
 const PROFILE_BASE_PATH = "/api/v1/profiles";
 
 const PATHS = {
-  base: PROFILE_BASE_PATH,
+  base: `${PROFILE_BASE_PATH}/`,
   me: `${PROFILE_BASE_PATH}/me`,
   byId: (profileId: string | number) => `${PROFILE_BASE_PATH}/${profileId}`,
 };
@@ -29,26 +29,53 @@ const PATHS = {
 type ApiErrorShape = {
   status?: number;
   detail?: string;
+  message?: string;
 };
 
 const isApiError = (error: unknown): error is ApiErrorShape =>
   typeof error === "object" && error !== null;
 
+const isErrorString = (error: unknown): error is string => typeof error === "string";
+
+const shouldReturnNull = (error: ApiErrorShape | string): boolean => {
+  const status = typeof error === "object" ? error.status : undefined;
+  if (status === 404 || status === 401) {
+    return true;
+  }
+
+  const detail =
+    typeof error === "object"
+      ? typeof error.detail === "string"
+        ? error.detail
+        : typeof error.message === "string"
+          ? error.message
+          : undefined
+      : error;
+
+  const normalizedDetail = detail?.toLowerCase().trim();
+  if (!normalizedDetail) {
+    return false;
+  }
+
+  return (
+    normalizedDetail.includes("not found") ||
+    normalizedDetail.includes("not authenticated") ||
+    normalizedDetail.includes("no profile")
+  );
+};
+
 export async function getProfile(): Promise<Profile | null> {
   try {
     return await apiRequest<Profile>({ method: "get", url: PATHS.me });
   } catch (error: unknown) {
-    if (isApiError(error)) {
-      const { status, detail } = error;
-      if (
-        status === 404 ||
-        status === 401 ||
-        detail === "Not Found" ||
-        detail === "Not authenticated"
-      ) {
-        return null;
-      }
+    if (isApiError(error) && shouldReturnNull(error)) {
+      return null;
     }
+
+    if (isErrorString(error) && shouldReturnNull(error)) {
+      return null;
+    }
+
     throw error;
   }
 }

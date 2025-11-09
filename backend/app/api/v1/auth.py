@@ -222,6 +222,25 @@ async def refresh_access_token(request: Request, response: Response):
         logger.exception("Refresh failed: %s", e)
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Could not refresh session")
 
+@router.post("/logout")
+async def logout(response: Response):
+    """Clear authentication cookies and logout user."""
+    # Clear refresh token cookie
+    response.delete_cookie(
+        key=config.settings.REFRESH_COOKIE_NAME,
+        path="/",
+        secure=bool(config.settings.COOKIE_SECURE),
+        samesite=(config.settings.COOKIE_SAMESITE or "lax").lower()
+    )
+    # Clear CSRF cookie
+    response.delete_cookie(
+        key=config.settings.CSRF_COOKIE_NAME,
+        path="/",
+        secure=bool(config.settings.COOKIE_SECURE),
+        samesite=(config.settings.COOKIE_SAMESITE or "lax").lower()
+    )
+    return {"message": "Logged out successfully"}
+
 @router.get("/me", response_model=schemas.UserRead)
 async def get_authenticated_user(current_user=Depends(deps.get_current_active_user)):
     """Return the authenticated user if the access token is valid.

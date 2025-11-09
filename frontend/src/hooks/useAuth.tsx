@@ -105,9 +105,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Set up localStorage persistence (browser only)
   useEffect(() => {
     if (typeof window === "undefined") return;
+    if (typeof persistQueryClient !== "function" || typeof createSyncStoragePersister !== "function") return;
+
     try {
       const PERSIST_KEY = "rq-cache";
-      // Only persist specific query key prefixes
       const PERSISTED_QUERY_KEY_PREFIXES: ReadonlyArray<ReadonlyArray<unknown>> = [["me"]];
 
       const isKeyPrefixMatch = (key: readonly unknown[], prefix: readonly unknown[]) =>
@@ -143,7 +144,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             }
           },
         },
-        // Defensive JSON handling to avoid hydration failures on malformed cache
         serialize: (client: unknown) => {
           try {
             return JSON.stringify(client);
@@ -155,7 +155,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           try {
             return JSON.parse(cachedString);
           } catch {
-            // If parsing fails, clear the bad cache and skip restore
             try {
               window.localStorage.removeItem(PERSIST_KEY);
             } catch {

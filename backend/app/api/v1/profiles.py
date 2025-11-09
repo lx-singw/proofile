@@ -2,7 +2,6 @@ from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import IntegrityError
 from pathlib import Path
-from fastapi.responses import JSONResponse
 
 from app.core.file_upload import (
     validate_file_size,
@@ -17,12 +16,13 @@ from app.services import profile_service
 from app.models.user import UserRole
 from app.schemas.profile import ProfileRead, ProfileCreate, ProfileUpdate
 
-router = APIRouter()
+router = APIRouter(redirect_slashes=False)
 
 # Standard error messages
 PROFILE_NOT_FOUND = "Profile not found"
 
 @router.get("/", response_model=list[ProfileRead])
+@router.get("", response_model=list[ProfileRead], include_in_schema=False)
 async def list_profiles(
     skip: int = 0,
     limit: int = 10,
@@ -82,6 +82,7 @@ async def get_profile(
 
 
 @router.post("/", response_model=ProfileRead, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=ProfileRead, status_code=status.HTTP_201_CREATED, include_in_schema=False)
 async def create_profile(
     profile_data: ProfileCreate,
     db: AsyncSession = Depends(deps.get_db),
@@ -149,7 +150,7 @@ async def update_profile(
     return updated_profile
 
 
-@router.post("/avatar", status_code=status.HTTP_200_OK)
+@router.post("/avatar", response_model=ProfileRead, status_code=status.HTTP_200_OK)
 async def upload_avatar(
     file: UploadFile = File(...),
     db: AsyncSession = Depends(deps.get_db),
@@ -179,7 +180,7 @@ async def upload_avatar(
     try:
         # Save the file
         await save_upload_file(file, file_path)
-        
+
         # Update profile with avatar URL
         avatar_url = f"/avatars/{unique_filename}"  # URL path, not filesystem path
         profile.avatar_url = avatar_url
@@ -187,10 +188,7 @@ async def upload_avatar(
         await db.commit()
         await db.refresh(profile)
 
-        return JSONResponse(content={
-            "message": "Avatar uploaded successfully",
-            "avatar_url": avatar_url
-        })
+        return profile
         
     except Exception as e:
         # Clean up on error

@@ -1,0 +1,246 @@
+name: Security Scanning
+
+on:
+  schedule:
+    - cron: '0 6 * * *' # Daily at 6 AM UTC
+  workflow_dispatch: # Manual trigger
+  push:
+    branches: [main]
+    paths:
+      - '**/*.py'
+      - '**/*.js'
+      - '**/*.ts'
+      - '**/*.tsx'
+      - '**/requirements.txt'
+      - '**/package.json'
+      - '**/pyproject.toml'
+      - '**/Dockerfile'
+
+env:
+  PYTHON_VERSION: '3.11'
+  NODE_VERSION: '20.x'
+
+jobs:
+  secrets-scan:
+    name: Secrets Detection
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Full history for better secret detection
+
+      - name: Run TruffleHog OSS
+        uses: trufflesecurity/trufflehog@main
+        with:
+          path: ./
+          base: main
+          head: HEAD
+          extra_args: --debug --only-verified
+
+      - name: GitLeaks Scan
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          config-path: .gitleaks.toml
+
+  sast-analysis:
+    name: Static Application Security Testing
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        tool: [semgrep, sonarcloud]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run Semgrep
+        if: matrix.tool == 'semgrep'
+        uses: semgrep/semgrep-action@v1
+        with:
+          config: >-
+            p/security-audit
+            p/secrets
+            p/owasp-top-ten
+            p/python
+            p/javascript
+            p/typescript
+        env:
+          SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
+
+      - name: SonarCloud Scan
+        if: matrix.tool == 'sonarcloud'
+        uses: SonarSource/sonarcloud-github-action@master
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
+  dependency-security:
+    name: Dependency Security Analysis
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        component: [frontend, backend]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js (Frontend)
+        if: matrix.component == 'frontend'
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Setup Python (Backend)
+        if: matrix.component == 'backend'
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install Poetry (Backend)
+        if: matrix.component == 'backend'
+        uses: snok/install-poetry@v1
+
+      - name: Frontend Dependency Analysis
+        if: matrix.component == 'frontend'
+        working-directory: ./frontend
+        run: |
+          npm ci
+          # Audit with npm
+          npm audit --audit-level=moderate --json > npm-audit.json || true
+          # Snyk test
+          npx snyk test --severity-threshold=medium --json > snyk-test.json || true
+          # OSV Scanner
+          curl -L https://github.com/google/osv-scanner/releases/latest/download/osv-scanner_linux_amd64 -o osv-scanner
+          chmod +x osv-scanner
+          ./osv-scanner --lockfile=package-lock.json --format=json --output=osv-results.json || true
+
+      - name: Backend Dependency Analysis
+        if: matrix.component == 'backend'
+        working-directory: ./backend
+        run: |
+          poetry install
+          # Safety check
+          poetry add --group dev safety
+          poetry run safety check --json --output safety-results.json || true
+          # Snyk test
+          poetry add --group dev snyk
+          poetry run snyk test --severity-threshold=medium --json > snyk-test.json || true
+          # OSV Scanner
+          curl -L https://github.com/google/osv-scanner/releases/latest/download/osv-scanner_linux_amd64 -o osv-scanner
+          chmod +x osv-scanner
+          ./osv-scanner --lockfile=poetry.lock --format=json --output=osv-results.json || true
+
+      - name: Upload Security Reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-reports-${{ matrix.component }}
+          path: |
+            ${{ matrix.component }}/*-audit.json
+            ${{ matrix.component }}/*-test.json
+            ${{ matrix.component }}/*-results.json
+          retention-days: 30
+
+  infrastructure-security:
+    name: Infrastructure Security
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Run Checkov
+        uses: bridgecrewio/checkov-action@master
+        with:
+          directory: .
+          framework: dockerfile,kubernetes,terraform
+          output_format: sarif
+          output_file_path: checkov-results.sarif
+          quiet: true
+          soft_fail: true
+
+      - name: Upload Checkov results
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: checkov-results.sarif
+
+      - name: Docker Security with Hadolint
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: frontend/Dockerfile
+          format: sarif
+          output-file: hadolint-frontend.sarif
+          no-fail: true
+
+      - name: Docker Security with Hadolint (Backend)
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: backend/Dockerfile
+          format: sarif
+          output-file: hadolint-backend.sarif
+          no-fail: true
+
+      - name: Upload Hadolint results
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: |
+            hadolint-frontend.sarif
+            hadolint-backend.sarif
+
+  security-report:
+    name: Generate Security Report
+    runs-on: ubuntu-latest
+    needs: [secrets-scan, sast-analysis, dependency-security, infrastructure-security]
+    if: always()
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+
+      - name: Generate Security Summary
+        run: |
+          echo "# 🔒 Security Scan Report" > security-report.md
+          echo "" >> security-report.md
+          echo "## Scan Results Summary" >> security-report.md
+          echo "" >> security-report.md
+          echo "| Component | Status | Details |" >> security-report.md
+          echo "|-----------|--------|---------|" >> security-report.md
+          echo "| Secrets Detection | ${{ needs.secrets-scan.result }} | TruffleHog + GitLeaks |" >> security-report.md
+          echo "| SAST Analysis | ${{ needs.sast-analysis.result }} | Semgrep + SonarCloud |" >> security-report.md
+          echo "| Dependency Security | ${{ needs.dependency-security.result }} | Snyk + Safety + OSV |" >> security-report.md
+          echo "| Infrastructure Security | ${{ needs.infrastructure-security.result }} | Checkov + Hadolint |" >> security-report.md
+          echo "" >> security-report.md
+          echo "## Recommendations" >> security-report.md
+          echo "" >> security-report.md
+          echo "- Review all HIGH and CRITICAL findings immediately" >> security-report.md
+          echo "- Update dependencies with known vulnerabilities" >> security-report.md
+          echo "- Fix any secrets detected in the codebase" >> security-report.md
+          echo "- Address infrastructure misconfigurations" >> security-report.md
+          echo "" >> security-report.md
+          echo "Generated on: $(date)" >> security-report.md
+
+      - name: Upload Security Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-report
+          path: security-report.md
+          retention-days: 90
+
+      - name: Comment PR with Security Summary
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const report = fs.readFileSync('security-report.md', 'utf8');
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: report
+            });

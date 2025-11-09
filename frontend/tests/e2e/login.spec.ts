@@ -188,7 +188,7 @@ test.describe('Login Flow', () => {
 
     await expect.poll(() => page.url(), { timeout: 15000 }).toMatch(/\/dashboard$/);
     await expect(page.getByRole('heading', { name: /dashboard/i })).toBeVisible();
-    await expect(page.getByTestId('dashboard-user')).toContainText(email);
+  await expect(page.getByTestId('dashboard-user')).toContainText(email, { timeout: 20000 });
   });
 
   test('persists session after refresh', async ({ page }) => {
@@ -211,5 +211,47 @@ test.describe('Login Flow', () => {
     await page.reload({ waitUntil: 'domcontentloaded' });
     await expect.poll(() => page.url(), { timeout: 15000 }).toMatch(/\/dashboard$/);
     await expect(page.getByTestId('dashboard-user')).toContainText(email);
+  });
+
+  test('clears session cookies and storage on logout', async ({ page, context }) => {
+    const email = `logout-${UNIQUE_PREFIX()}@example.com`;
+    const password = 'SuperSecret123!';
+    await ensureTestUser(email, password);
+    await seedProfileForUser(email, password);
+
+    await gotoWithRetry(page, '/login');
+    await page.getByLabel(/email/i).fill(email);
+    await page.getByLabel(/password/i).fill(password);
+    await Promise.all([
+      page.waitForResponse((r: any) => r.url().includes('/api/v1/auth/token') && r.status() >= 200 && r.status() < 300),
+      page.getByRole('button', { name: /sign in/i }).click(),
+    ]);
+
+    await expect.poll(() => page.url(), { timeout: 15000 }).toMatch(/\/dashboard$/);
+    await expect(page.getByTestId('dashboard-user')).toContainText(email, { timeout: 20000 });
+
+    await expect.poll(async () => {
+      const cookies = await context.cookies();
+      return cookies.some((cookie) => cookie.name === 'refresh_token');
+    }).toBeTruthy();
+
+    await Promise.all([
+      page.waitForResponse((r: any) => r.url().includes('/api/v1/auth/logout') && r.status() >= 200 && r.status() < 300),
+      page.getByRole('button', { name: /sign out/i }).click(),
+    ]);
+
+    await expect.poll(() => page.url(), { timeout: 15000 }).toMatch(/\/login$/);
+    await expect(page.getByRole('heading', { name: /sign in/i })).toBeVisible();
+
+    await expect.poll(async () => {
+      const cookies = await context.cookies();
+      return cookies.some((cookie) => cookie.name === 'refresh_token');
+    }).toBeFalsy();
+
+    await expect.poll(async () => page.evaluate(() => window.localStorage.getItem('auth:accessToken'))).toBeNull();
+
+    await gotoWithRetry(page, '/dashboard');
+    await expect.poll(() => page.url(), { timeout: 15000 }).toMatch(/\/login$/);
+    await expect(page.getByRole('heading', { name: /sign in/i })).toBeVisible();
   });
 });

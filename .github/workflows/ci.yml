@@ -2,14 +2,161 @@ name: CI Pipeline
 
 on:
   push:
-    branches: ["main"]
+    branches: ["main", "develop"]
   pull_request:
-    branches: ["main"]
+    branches: ["main", "develop"]
+  schedule:
+    - cron: '0 2 * * 1' # Weekly security scan on Mondays at 2 AM
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
 
 jobs:
+  # Security Analysis Jobs
+  codeql-analysis:
+    name: CodeQL Security Analysis
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        language: ['javascript', 'python']
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+          queries: security-extended,security-and-quality
+
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@v3
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:${{matrix.language}}"
+
+  dependency-review:
+    name: Dependency Review
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Dependency Review
+        uses: actions/dependency-review-action@v4
+        with:
+          fail-on-severity: moderate
+          allow-licenses: MIT, Apache-2.0, BSD-2-Clause, BSD-3-Clause, ISC
+
+  frontend-security:
+    name: Frontend Security Scan
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./frontend
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20.x"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run Snyk to check for vulnerabilities
+        uses: snyk/actions/node@master
+        continue-on-error: false
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        with:
+          args: --severity-threshold=high --fail-on=upgradable
+
+      - name: Run Snyk Code Analysis
+        uses: snyk/actions/node@master
+        continue-on-error: false
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        with:
+          command: code test
+          args: --severity-threshold=high
+
+      - name: ESLint Security Scan
+        run: |
+          npm install eslint-plugin-security --save-dev
+          npx eslint . --ext .js,.jsx,.ts,.tsx --config .eslintrc-security.js || true
+
+  backend-security:
+    name: Backend Security Scan
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./backend
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Poetry
+        uses: snok/install-poetry@v1
+        with:
+          version: latest
+          virtualenvs-create: true
+          virtualenvs-in-project: true
+
+      - name: Install dependencies
+        run: poetry install
+
+      - name: Run Snyk Python Security Scan
+        uses: snyk/actions/python@master
+        continue-on-error: false
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        with:
+          args: --severity-threshold=high --fail-on=upgradable
+
+      - name: Run Bandit Security Linter
+        run: |
+          poetry add --group dev bandit[toml]
+          poetry run bandit -r app/ -f json -o bandit-report.json || true
+          poetry run bandit -r app/ -ll
+
+      - name: Run Safety Check
+        run: |
+          poetry add --group dev safety
+          poetry run safety check --json --output safety-report.json || true
+          poetry run safety check
+
+      - name: Upload Security Reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: security-reports-backend
+          path: |
+            backend/bandit-report.json
+            backend/safety-report.json
+          retention-days: 30
+
   frontend-test:
     name: Run Frontend Tests
     runs-on: ubuntu-latest
+    needs: [frontend-security]
 
     defaults:
       run:
@@ -32,26 +179,10 @@ jobs:
       - name: Run tests
         run: npm test
 
-  security-scan:
-    name: Run Snyk Security Scan
-    runs-on: ubuntu-latest
-    needs: [frontend-test, backend-test]
-    # This job should only run on pushes to the main branch to avoid blocking PRs
-    # Or you can run it on PRs and configure it to fail the build on new issues
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Run Snyk to check for vulnerabilities
-        uses: snyk/actions/node@master
-        continue-on-error: true # To prevent build failures on new vulnerabilities
-        env:
-          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-
   backend-test:
     name: Run Backend Tests
     runs-on: ubuntu-latest
+    needs: [backend-security]
 
     steps:
       - name: Checkout repository
@@ -66,11 +197,68 @@ jobs:
       - name: Run backend tests
         run: make test-backend
 
+  container-security:
+    name: Container Security Scan
+    runs-on: ubuntu-latest
+    needs: [frontend-test, backend-test]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Build Frontend Image for Scanning
+        run: docker build -t proofile-frontend:test ./frontend
+
+      - name: Build Backend Image for Scanning
+        run: docker build -t proofile-backend:test ./backend
+
+      - name: Run Trivy vulnerability scanner on Frontend
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: 'proofile-frontend:test'
+          format: 'sarif'
+          output: 'trivy-frontend-results.sarif'
+
+      - name: Run Trivy vulnerability scanner on Backend
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: 'proofile-backend:test'
+          format: 'sarif'
+          output: 'trivy-backend-results.sarif'
+
+      - name: Upload Trivy scan results to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: 'trivy-frontend-results.sarif'
+
+      - name: Upload Trivy scan results to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: 'trivy-backend-results.sarif'
+
+      - name: Snyk Container Scan - Frontend
+        continue-on-error: true
+        uses: snyk/actions/docker@master
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        with:
+          image: proofile-frontend:test
+          args: --severity-threshold=high
+
+      - name: Snyk Container Scan - Backend
+        continue-on-error: true
+        uses: snyk/actions/docker@master
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        with:
+          image: proofile-backend:test
+          args: --severity-threshold=high
+
   e2e-test:
     name: Run E2E Tests
     runs-on: ubuntu-latest
-    # This job depends on the backend tests passing, which implies services can start
-    needs: [backend-test]
+    needs: [frontend-test, backend-test]
 
     steps:
       - name: Checkout repository
@@ -99,19 +287,36 @@ jobs:
 
       - name: Upload Playwright report
         uses: actions/upload-artifact@v4
-        if: always() # Always upload the report, even if tests fail
+        if: always()
         with:
           name: playwright-report
           path: frontend/playwright-report/
           retention-days: 7
 
+  security-summary:
+    name: Security Summary
+    runs-on: ubuntu-latest
+    needs: [codeql-analysis, frontend-security, backend-security, container-security]
+    if: always()
+    steps:
+      - name: Security Scan Summary
+        run: |
+          echo "## Security Scan Summary" >> $GITHUB_STEP_SUMMARY
+          echo "| Component | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-----------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| CodeQL Analysis | ${{ needs.codeql-analysis.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Frontend Security | ${{ needs.frontend-security.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Backend Security | ${{ needs.backend-security.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Container Security | ${{ needs.container-security.result }} |" >> $GITHUB_STEP_SUMMARY
+
   build-and-push:
     name: Build and Push Docker Images
     runs-on: ubuntu-latest
-    # This job should only run on pushes to the main branch
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    # This job depends on the test jobs passing
-    needs: [frontend-test, backend-test, e2e-test, security-scan]
+    needs: [frontend-test, backend-test, e2e-test, container-security, security-summary]
+    permissions:
+      contents: read
+      packages: write
 
     steps:
       - name: Checkout repository
@@ -120,7 +325,7 @@ jobs:
       - name: Log in to the GitHub Container Registry
         uses: docker/login-action@v3
         with:
-          registry: ghcr.io
+          registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
@@ -129,21 +334,26 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: |
-            ghcr.io/${{ github.repository }}/frontend
-            ghcr.io/${{ github.repository }}/backend
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/frontend
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/backend
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=sha,prefix={{branch}}-
+            type=raw,value=latest,enable={{is_default_branch}}
 
       - name: Build and push frontend image
         uses: docker/build-push-action@v5
         with:
           context: ./frontend
           push: true
-          tags: ${{ steps.meta.outputs.tags_frontend }}
-          labels: ${{ steps.meta.outputs.labels_frontend }}
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/frontend:latest,${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/frontend:${{ github.sha }}
+          labels: ${{ steps.meta.outputs.labels }}
 
       - name: Build and push backend image
         uses: docker/build-push-action@v5
         with:
           context: ./backend
           push: true
-          tags: ${{ steps.meta.outputs.tags_backend }}
-          labels: ${{ steps.meta.outputs.labels_backend }}
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/backend:latest,${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/backend:${{ github.sha }}
+          labels: ${{ steps.meta.outputs.labels }}
