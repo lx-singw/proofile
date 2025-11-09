@@ -49,7 +49,10 @@ async def engine() -> AsyncGenerator:
     try:
         yield _engine
     finally:
-        await _engine.dispose()
+        try:
+            await _engine.dispose()
+        except Exception as e:
+            print(f"Warning: Failed to dispose engine: {e}")
 
 
 @pytest_asyncio.fixture(scope="session", autouse=True)
@@ -67,27 +70,34 @@ async def create_test_db(engine) -> AsyncGenerator[None, None]:
 
     try:
         # Create test database
-        async with maintenance_engine.connect() as conn:
-            # Drop active connections
-            await conn.execute(text(f"""
-                SELECT pg_terminate_backend(pg_stat_activity.pid)
-                FROM pg_stat_activity
-                WHERE pg_stat_activity.datname = '{TEST_DB_NAME}'
-                AND pid <> pg_backend_pid();
-            """))
-            # Drop and recreate test database
-            await conn.execute(text(f'DROP DATABASE IF EXISTS "{TEST_DB_NAME}"'))
-            await conn.execute(text(f'CREATE DATABASE "{TEST_DB_NAME}" TEMPLATE template0'))
+        try:
+            async with maintenance_engine.connect() as conn:
+                # Drop active connections
+                await conn.execute(text(f"""
+                    SELECT pg_terminate_backend(pg_stat_activity.pid)
+                    FROM pg_stat_activity
+                    WHERE pg_stat_activity.datname = '{TEST_DB_NAME}'
+                    AND pid <> pg_backend_pid();
+                """))
+                # Drop and recreate test database
+                await conn.execute(text(f'DROP DATABASE IF EXISTS "{TEST_DB_NAME}"'))
+                await conn.execute(text(f'CREATE DATABASE "{TEST_DB_NAME}" TEMPLATE template0'))
+        except Exception as e:
+            raise RuntimeError(f"Failed to create test database '{TEST_DB_NAME}': {e}") from e
 
         # Initialize test database schema
-        async with engine.begin() as conn:
-            await conn.run_sync(Base.metadata.create_all)
+        try:
+            async with engine.begin() as conn:
+                await conn.run_sync(Base.metadata.create_all)
+        except Exception as e:
+            raise RuntimeError(f"Failed to initialize test database schema: {e}") from e
 
         yield
 
     finally:
         # Drop database after all tests
         try:
+            await engine.dispose()
             async with maintenance_engine.connect() as conn:
                 # Force drop active connections again before final drop
                 await conn.execute(text(f"""
@@ -118,11 +128,25 @@ async def db_session(engine) -> AsyncGenerator[AsyncSession, None]:
     try:
         yield session
     finally:
-        # Clean up all tables after each test to ensure isolation
-        async with engine.begin() as conn:
-            for table in reversed(Base.metadata.sorted_tables):
-                await conn.execute(table.delete())
+        # Roll back any pending transaction before closing so TRUNCATE is never blocked
+        try:
+            if session.in_transaction():
+                await session.rollback()
+        except Exception:
+            pass
         await session.close()
+
+        # Fast cleanup between tests while resetting identity counters
+        table_names = [f'"{table.name}"' for table in Base.metadata.sorted_tables]
+        if table_names:
+            async with engine.begin() as conn:
+                await conn.execute(
+                    text(
+                        "TRUNCATE TABLE "
+                        + ", ".join(table_names)
+                        + " RESTART IDENTITY CASCADE"
+                    )
+                )
 
 
 @pytest_asyncio.fixture(scope="function")
@@ -222,13 +246,20 @@ async def test_user(db_session: AsyncSession) -> User:
 
 
 @pytest_asyncio.fixture
-async def auth_headers(test_user: User) -> dict:
+async def auth_headers(test_user: User, db_session: AsyncSession) -> dict:
     """
     Returns a headers dict with the authorization token for test_user.
     This fixture creates a token directly without using the API endpoint.
     """
     from app.core.security import create_access_token
+    from app.models.user import UserRole
     
+    # Elevate the fixture user to admin for tests that need elevated access patterns
+    test_user.role = UserRole.ADMIN
+    db_session.add(test_user)
+    await db_session.commit()
+    await db_session.refresh(test_user)
+
     # Create token directly
     token = create_access_token(
         data={

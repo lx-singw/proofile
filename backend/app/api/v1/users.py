@@ -8,8 +8,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app import schemas
 from app.api.v1 import deps
 from app.services import user_service, profile_service
+from app.models.user import UserRole
 
 router = APIRouter()
+
+
+def _is_admin(role) -> bool:
+    if isinstance(role, UserRole):
+        return role == UserRole.ADMIN
+    if isinstance(role, str):
+        return role.lower() == UserRole.ADMIN.value
+    return False
 
 async def create_user(
     *,
@@ -56,7 +65,7 @@ async def update_user(
     """
     Update a user's details. Only accessible by admins.
     """
-    if current_user.role != "ADMIN":
+    if not _is_admin(getattr(current_user, "role", None)):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You do not have permission to perform this action.",
@@ -69,5 +78,11 @@ async def update_user(
             detail="User not found.",
         )
 
-    updated_user = await user_service.update_user(db, user=user, user_in=user_in)
-    return updated_user
+    try:
+        updated_user = await user_service.update_user(db, user=user, user_in=user_in)
+        return updated_user
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to update user"
+        ) from e

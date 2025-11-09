@@ -17,6 +17,12 @@ RUN npm ci && npm install -g snyk
 # Copy application code
 COPY . .
 
+# Ensure workspace ownership matches non-root user for dev workflows
+RUN chown -R pwuser:pwuser /app
+
+# Drop privileges for development runtime
+USER pwuser
+
 # Expose port
 EXPOSE 3000
 

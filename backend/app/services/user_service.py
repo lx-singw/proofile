@@ -4,6 +4,7 @@ Service layer for user-related operations.
 This encapsulates the business logic for creating, retrieving,
 and managing users, separating it from the API endpoints.
 """
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from app.models.user import User
@@ -40,10 +41,17 @@ async def create_user(db: AsyncSession, user_in: UserCreate) -> User:
         full_name=user_in.full_name,
         role=user_in.role,
     )
-    db.add(db_user)
-    await db.commit()
-    await db.refresh(db_user)
-    return db_user
+    try:
+        db.add(db_user)
+        await db.commit()
+        await db.refresh(db_user)
+        return db_user
+    except IntegrityError:
+        await db.rollback()
+        raise
+    except Exception as e:
+        await db.rollback()
+        raise RuntimeError(f"Failed to create user: {e}") from e
  
 async def update_user(db: AsyncSession, user: User, user_in: UserUpdate) -> User:
     """
@@ -59,6 +67,13 @@ async def update_user(db: AsyncSession, user: User, user_in: UserUpdate) -> User
     for field, value in update_data.items():
         setattr(user, field, value)
 
-    await db.flush()
-    await db.refresh(user)
-    return user
+    try:
+        await db.commit()
+        await db.refresh(user)
+        return user
+    except IntegrityError:
+        await db.rollback()
+        raise
+    except Exception as e:
+        await db.rollback()
+        raise RuntimeError(f"Failed to update user: {e}") from e

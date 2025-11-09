@@ -1,7 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
+from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import IntegrityError
 from pathlib import Path
+from sqlalchemy import select
 
 from app.core.file_upload import (
     validate_file_size,
@@ -12,7 +14,8 @@ from app.core.file_upload import (
 
 from app.api.v1 import deps
 from app.models.user import User
-from app.services import profile_service
+from app.models.profile import Profile
+from app.services import profile_service, profile_cache
 from app.models.user import UserRole
 from app.schemas.profile import ProfileRead, ProfileCreate, ProfileUpdate
 
@@ -32,8 +35,25 @@ async def list_profiles(
     """
     List profiles with pagination.
     """
-    profiles = await profile_service.get_profiles(db, skip=skip, limit=limit)
-    return profiles
+    cached = await profile_cache.get_profile_list(skip, limit)
+    if cached is not None:
+        return cached
+
+    rows = await db.execute(
+        select(
+            Profile.id,
+            Profile.user_id,
+            Profile.headline,
+            Profile.summary,
+            Profile.avatar_url,
+        )
+        .offset(skip)
+        .limit(limit)
+        .order_by(Profile.id)
+    )
+    profile_payload = [dict(row) for row in rows.mappings().all()]
+    await profile_cache.set_profile_list(skip, limit, profile_payload)
+    return profile_payload
 
 @router.get("/me", response_model=ProfileRead)
 async def get_my_profile(
@@ -62,7 +82,37 @@ async def get_profile(
     Get a specific profile by its ID.
     Access is restricted to owners, admins, and employers.
     """
+    cached_profile = await profile_cache.get_profile(profile_id)
+
+    if current_user.role not in [UserRole.ADMIN, UserRole.EMPLOYER]:
+        if cached_profile and getattr(cached_profile, "user_id", None) == current_user.id:
+            return cached_profile
+
+        user_profile = await profile_service.get_profile_by_user_id(db, user_id=current_user.id)
+        if not user_profile:
+            last_known_id = await profile_cache.get_last_known_profile_id(current_user.id)
+            if last_known_id == profile_id:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=PROFILE_NOT_FOUND
+                )
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You do not have permission to view this profile"
+            )
+        if user_profile.id != profile_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You do not have permission to view this profile"
+            )
+        profile_read = ProfileRead.model_validate(user_profile)
+        await profile_cache.set_profile(profile_read)
+        return profile_read
+
     # Fetch the profile once at the beginning
+    if cached_profile:
+        return cached_profile
+
     profile = await profile_service.get_profile(db, id=profile_id)
     if not profile:
         raise HTTPException(
@@ -70,15 +120,9 @@ async def get_profile(
             detail=f"Profile with ID {profile_id} not found"
         )
 
-    # Authorization check: Allow access only to specific roles or the owner
-    if current_user.role not in [UserRole.ADMIN, UserRole.EMPLOYER]:
-        # Check if the user is trying to access their own profile
-        if profile.user_id != current_user.id: # Use the already fetched profile
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="You do not have permission to view this profile"
-            )
-    return profile
+    profile_read = ProfileRead.model_validate(profile)
+    await profile_cache.set_profile(profile_read)
+    return profile_read
 
 
 @router.post("/", response_model=ProfileRead, status_code=status.HTTP_201_CREATED)
@@ -103,7 +147,9 @@ async def create_profile(
         new_profile = await profile_service.create_profile(
             db=db, profile_in=profile_data, user_id=current_user.id
         )
-        return new_profile
+        profile_read = ProfileRead.model_validate(new_profile)
+        await profile_cache.set_profile(profile_read)
+        return profile_read
     except IntegrityError: # Should be rare now, but good as a safeguard.
         await db.rollback()
         raise HTTPException(
@@ -147,10 +193,18 @@ async def update_profile(
         )
 
     updated_profile = await profile_service.update_profile(db=db, profile=profile, profile_in=profile_update)
-    return updated_profile
+    if updated_profile:
+        profile_read = ProfileRead.model_validate(updated_profile)
+        await profile_cache.set_profile(profile_read)
+        return profile_read
+    await profile_cache.invalidate_profile(profile_id)
+    raise HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail="Profile not found"
+    )
 
 
-@router.post("/avatar", response_model=ProfileRead, status_code=status.HTTP_200_OK)
+@router.post("/avatar", status_code=status.HTTP_200_OK)
 async def upload_avatar(
     file: UploadFile = File(...),
     db: AsyncSession = Depends(deps.get_db),
@@ -173,6 +227,14 @@ async def upload_avatar(
     # Prepare file path - in production this would be cloud storage
     # For now, store in a local uploads directory
     uploads_dir = Path("uploads/avatars")
+    
+    # Sanitize filename to prevent path traversal attacks
+    if not file.filename or ".." in file.filename or "/" in file.filename or "\\" in file.filename:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid filename"
+        )
+    
     file_ext = Path(file.filename).suffix
     unique_filename = f"user_{current_user.id}_avatar{file_ext}"
     file_path = uploads_dir / unique_filename
@@ -188,7 +250,16 @@ async def upload_avatar(
         await db.commit()
         await db.refresh(profile)
 
-        return profile
+        profile_read = ProfileRead.model_validate(profile)
+        await profile_cache.set_profile(profile_read)
+
+        return JSONResponse(
+            status_code=status.HTTP_200_OK,
+            content={
+                "message": "Avatar uploaded successfully",
+                "avatar_url": avatar_url,
+            },
+        )
         
     except Exception as e:
         # Clean up on error
@@ -224,6 +295,12 @@ async def delete_profile(
             detail="You do not have permission to delete this profile"
         )
 
-    await profile_service.delete_profile(db=db, profile=profile)
-
-    return None
+    try:
+        await profile_service.delete_profile(db=db, profile=profile)
+        await profile_cache.invalidate_profile(profile_id)
+        return None
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to delete profile"
+        ) from e

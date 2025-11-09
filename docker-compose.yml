@@ -78,11 +78,11 @@ services:
       dockerfile: Dockerfile
       target: development
     container_name: proofile-frontend
+    user: "${UID:-1000}:${GID:-1000}"
     ports:
       - "${FRONTEND_PORT:-3000}:3000"
     volumes:
       - ./frontend:/app
-      - frontend_cache:/app/.next/cache
     env_file:
       - .env
     environment:

@@ -124,9 +124,11 @@ async def test_multiple_login_tokens(client: AsyncClient, test_user: User):
     login_data = {"username": test_user.email, "password": "TestPass123!"}
 
     response1 = await client.post(LOGIN_ENDPOINT_URL, data=login_data, headers={"Content-Type": "application/x-www-form-urlencoded"})
+    assert response1.status_code == status.HTTP_200_OK
     token1 = response1.json()["access_token"]
 
     response2 = await client.post(LOGIN_ENDPOINT_URL, data=login_data, headers={"Content-Type": "application/x-www-form-urlencoded"})
+    assert response2.status_code == status.HTTP_200_OK
     token2 = response2.json()["access_token"]
 
     headers1 = {"Authorization": f"Bearer {token1}"}

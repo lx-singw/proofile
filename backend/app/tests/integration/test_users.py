@@ -44,9 +44,9 @@ async def test_create_user_duplicate_email(client: AsyncClient, user_factory):
     }
 
     # Attempt to create the second user with the same email
-    response2 = await client.post("/api/v1/users", json=user_data)
-    assert response2.status_code == status.HTTP_400_BAD_REQUEST
-    assert "A user with this email already exists" in response2.json()["detail"]
+    duplicate_response = await client.post("/api/v1/users", json=user_data)
+    assert duplicate_response.status_code == status.HTTP_400_BAD_REQUEST
+    assert "A user with this email already exists" in duplicate_response.json()["detail"]
 
 
 async def test_create_user_password_too_short(client: AsyncClient):

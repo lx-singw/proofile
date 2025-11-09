@@ -1,2 +1,4 @@
-# This file can be empty.
-# It marks the 'v1' directory as a Python package.
+"""API v1 package.
+
+Contains version 1 of the Proofile API endpoints.
+"""

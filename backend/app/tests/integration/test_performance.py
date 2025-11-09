@@ -38,6 +38,7 @@ async def test_profile_listing_performance(
         data=login_data,
         headers={"Content-Type": "application/x-www-form-urlencoded"}
     )
+    assert login_res.status_code == status.HTTP_200_OK, f"Login failed: {login_res.text}"
     token = login_res.json()["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
     

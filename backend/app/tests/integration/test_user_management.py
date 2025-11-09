@@ -23,6 +23,7 @@ async def test_deactivate_user(client: AsyncClient, test_user: User, user_factor
     # Log in as admin
     login_data = {"username": admin.email, "password": "SecurePass123!"}
     login_res = await client.post("/api/v1/auth/token", data=login_data)
+    assert login_res.status_code == status.HTTP_200_OK, f"Admin login failed: {login_res.text}"
     token = login_res.json()["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
     

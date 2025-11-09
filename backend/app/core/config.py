@@ -1,4 +1,8 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import ValidationError
+import logging
+
+logger = logging.getLogger(__name__)
 
 class Settings(BaseSettings):
     # Pydantic will automatically read from environment variables.
@@ -42,4 +46,14 @@ class Settings(BaseSettings):
     COOKIE_SECURE: bool = False  # set True in production behind HTTPS
     REFRESH_COOKIE_NAME: str = "refresh_token"
 
-settings = Settings()
+try:
+    settings = Settings()
+    if settings.ENVIRONMENT == "production" and settings.SECRET_KEY == "your-secret-key-change-in-production":
+        raise ValueError("SECRET_KEY must be changed in production environment")
+    logger.info("Configuration loaded successfully")
+except ValidationError as e:
+    logger.error(f"Configuration validation failed: {e}")
+    raise RuntimeError(f"Invalid configuration: {e}") from e
+except Exception as e:
+    logger.error(f"Failed to load configuration: {e}")
+    raise RuntimeError(f"Configuration loading failed: {e}") from e

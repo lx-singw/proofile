@@ -281,10 +281,16 @@ async def test_rate_limiting(db_session: AsyncSession, user_factory, client: Asy
     try:
         import redis.asyncio as redis
         test_redis = redis.from_url(config.settings.REDIS_URL)
-        await test_redis.ping()
-    except Exception:
+        try:
+            await test_redis.ping()
+        finally:
+            await test_redis.close()
+    except (ConnectionError, redis.RedisError, OSError) as e:
         import pytest
-        pytest.skip("Redis not reachable for rate-limiting test")
+        pytest.skip(f"Redis not reachable for rate-limiting test: {e}")
+    except Exception as e:
+        import pytest
+        pytest.skip(f"Unexpected error connecting to Redis: {e}")
 
     # Override get_db for this test_app instance
     async def _get_db_override():
@@ -293,13 +299,12 @@ async def test_rate_limiting(db_session: AsyncSession, user_factory, client: Asy
 
     from httpx import ASGITransport
     async with AsyncClient(transport=ASGITransport(app=test_app), base_url="http://test") as test_client:
-
-    # Create a user to attempt login
+        # Create a user to attempt login
         user = await user_factory(email="ratelimit@example.com")
-    # Use the correct password from the factory
+        # Use the correct password from the factory
         login_data = {"username": user.email, "password": "SecurePass123!"}
-    
-    # Make many requests to the login endpoint
+        
+        # Make many requests to the login endpoint
         num_requests = 5 # Attempt more than the 1/second limit
         responses = []
         for _ in range(num_requests):
@@ -307,7 +312,7 @@ async def test_rate_limiting(db_session: AsyncSession, user_factory, client: Asy
             responses.append(response)
             # Introduce a small delay to ensure time passes, but not enough to reset the 1-second window
             await asyncio.sleep(0.1) 
-    
+        
         # At least one request should eventually get a 429. If rate limiting
         # isn't observed in this environment, skip the test to avoid a false
         # negative caused by infra differences (e.g., Redis ACLs, latency).
@@ -336,48 +341,62 @@ async def test_error_message_security(client: AsyncClient, auth_headers: dict):
     assert "Incorrect email or password" in error_message # Should be generic
 
 
-async def test_file_upload_security(client: AsyncClient, db_session: AsyncSession, user_factory):
-    """Test security for file uploads (e.g., avatar)."""
-    # Create a user and log in
+async def _setup_user_with_profile(user_factory, db_session, client):
+    """Helper to create user with profile and return auth headers."""
     user = await user_factory(email="upload_test@example.com", password="SecurePass123!")
     login_data = {"username": user.email, "password": "SecurePass123!"}
     login_res = await client.post("/api/v1/auth/token", data=login_data, headers={"Content-Type": "application/x-www-form-urlencoded"})
     token = login_res.json()["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
-
-    # A profile must exist before an avatar can be uploaded.
+    
     profile_in = ProfileCreate(headline="Upload Test Profile", summary="Summary")
     await profile_service.create_profile(db_session, profile_in, user.id)
+    return headers
 
-    # Test 1: Upload a file that is too large
-    large_file_content = b"a" * (11 * 1024 * 1024) # 11MB
+
+async def _test_file_size_limit(client, headers):
+    """Test file size validation."""
+    large_file_content = b"a" * (11 * 1024 * 1024)  # 11MB
     files = {"file": ("large_image.png", large_file_content, "image/png")}
-    response = await client.post("/api/v1/profiles/avatar", files=files, headers=headers) # No trailing slash for avatar endpoint
+    response = await client.post("/api/v1/profiles/avatar", files=files, headers=headers)
     assert response.status_code == status.HTTP_413_REQUEST_ENTITY_TOO_LARGE
     assert "File size exceeds maximum allowed size" in response.json()["detail"]
 
-    # Test 2: Upload a file with an disallowed extension
+
+async def _test_file_extension_validation(client, headers):
+    """Test file extension validation."""
     invalid_ext_content = b"dummy content"
-    files = {"file": ("malicious.exe", invalid_ext_content, "application/octet-stream")} # No trailing slash for avatar endpoint
-    response = await client.post("/api/v1/profiles/avatar", files=files, headers=headers) 
+    files = {"file": ("malicious.exe", invalid_ext_content, "application/octet-stream")}
+    response = await client.post("/api/v1/profiles/avatar", files=files, headers=headers)
     assert response.status_code == status.HTTP_415_UNSUPPORTED_MEDIA_TYPE
     assert "File extension .exe not allowed" in response.json()["detail"]
 
-    # Test 3: Upload a file with an disallowed MIME type (content validation)
+
+async def _test_mime_type_validation(client, headers):
+    """Test MIME type validation."""
     invalid_mime_content = b"<?php echo 'malicious code'; ?>"
-    files = {"file": ("script.php", invalid_mime_content, "text/plain")} # No trailing slash for avatar endpoint
-    response = await client.post("/api/v1/profiles/avatar", files=files, headers=headers) 
+    files = {"file": ("script.php", invalid_mime_content, "text/plain")}
+    response = await client.post("/api/v1/profiles/avatar", files=files, headers=headers)
     assert response.status_code == status.HTTP_415_UNSUPPORTED_MEDIA_TYPE
-    # The endpoint may reject by extension or by MIME/content; accept either message.
     detail = response.json()["detail"]
     assert ("File type text/plain not allowed" in detail) or ("File extension" in detail)
 
-    # Test 4: Valid upload (assuming a profile exists for the user)
-    # (profile was created earlier in this test)
 
-    valid_image_content = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=") # 1x1 transparent PNG
-    files = {"file": ("valid_image.png", valid_image_content, "image/png")} # No trailing slash for avatar endpoint
-    response = await client.post("/api/v1/profiles/avatar", files=files, headers=headers) 
+async def _test_valid_upload(client, headers):
+    """Test valid file upload."""
+    valid_image_content = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=")
+    files = {"file": ("valid_image.png", valid_image_content, "image/png")}
+    response = await client.post("/api/v1/profiles/avatar", files=files, headers=headers)
     assert response.status_code == status.HTTP_200_OK
     assert "Avatar uploaded successfully" in response.json()["message"]
     assert "avatar_url" in response.json()
+
+
+async def test_file_upload_security(client: AsyncClient, db_session: AsyncSession, user_factory):
+    """Test security for file uploads (e.g., avatar)."""
+    headers = await _setup_user_with_profile(user_factory, db_session, client)
+    
+    await _test_file_size_limit(client, headers)
+    await _test_file_extension_validation(client, headers)
+    await _test_mime_type_validation(client, headers)
+    await _test_valid_upload(client, headers)

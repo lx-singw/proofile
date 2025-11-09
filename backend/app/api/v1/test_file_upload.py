@@ -35,7 +35,7 @@ def test_validate_file_size_invalid():
         validate_file_size(mock_file, max_size_mb=5)
 
     assert exc_info.value.status_code == 413
-    assert "File size exceeds the limit" in exc_info.value.detail
+    assert "File size exceeds maximum allowed size" in exc_info.value.detail
 
 
 @pytest.mark.parametrize("filename, allowed, should_pass", [
@@ -52,5 +52,5 @@ def test_validate_file_extension(filename, allowed, should_pass):
     else:
         with pytest.raises(HTTPException) as exc_info:
             validate_file_extension(filename, allowed_extensions=allowed)
-        assert exc_info.value.status_code == 400
-        assert "Invalid file type" in exc_info.value.detail
+        assert exc_info.value.status_code == 415
+        assert "File extension" in exc_info.value.detail

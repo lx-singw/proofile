@@ -1,5 +1,7 @@
-from sqlalchemy import Column, Integer, String, Boolean, Enum as SQLAlchemyEnum
+from datetime import datetime
+from sqlalchemy import Column, Integer, String, Boolean, Enum as SQLAlchemyEnum, event
 from sqlalchemy.orm import relationship, Mapped
+from typing import Dict, Tuple
 from .base import Base, TimestampMixin
 import enum
 
@@ -23,3 +25,25 @@ class User(Base, TimestampMixin):
 
     # Relationship to Jobs
     jobs: Mapped[list["Job"]] = relationship("Job", back_populates="employer", cascade="all, delete-orphan")
+
+
+# Track latest status changes (id, updated_at, is_active) keyed by email
+USER_STATUS_CACHE: Dict[str, Tuple[int, datetime, bool]] = {}
+
+
+@event.listens_for(User, "after_insert")
+def _user_after_insert(mapper, connection, target: User) -> None:
+    USER_STATUS_CACHE[target.email.lower()] = (
+        target.id,
+        target.updated_at or datetime.utcnow(),
+        target.is_active,
+    )
+
+
+@event.listens_for(User, "after_update")
+def _user_after_update(mapper, connection, target: User) -> None:
+    USER_STATUS_CACHE[target.email.lower()] = (
+        target.id,
+        target.updated_at or datetime.utcnow(),
+        target.is_active,
+    )

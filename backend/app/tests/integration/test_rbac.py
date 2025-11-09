@@ -25,6 +25,7 @@ async def test_role_elevation_prevention(
     # Login as regular user
     login_data = {"username": regular_user.email, "password": "SecurePass123!"}
     login_res = await client.post("/api/v1/auth/token", data=login_data)
+    assert login_res.status_code == status.HTTP_200_OK
     token = login_res.json()["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
     
@@ -38,6 +39,7 @@ async def test_role_elevation_prevention(
     
     # Verify role hasn't changed
     user_response = await client.get("/api/v1/users/me/", headers=headers) # Add trailing slash
+    assert user_response.status_code == status.HTTP_200_OK
     assert user_response.json()["role"] == UserRole.APPRENTICE
 
 
@@ -171,7 +173,9 @@ async def test_permission_boundary(
     
     # Login as employer (using the correct password)
     employer_login = {"username": employer.email, "password": "SecurePass123!"}
-    employer_token = (await client.post("/api/v1/auth/token", data=employer_login)).json()["access_token"]
+    employer_login_res = await client.post("/api/v1/auth/token", data=employer_login)
+    assert employer_login_res.status_code == status.HTTP_200_OK, f"Employer login failed: {employer_login_res.text}"
+    employer_token = employer_login_res.json()["access_token"]
     employer_headers = {"Authorization": f"Bearer {employer_token}"}
     
     # Verify employer can view but not modify apprentice data

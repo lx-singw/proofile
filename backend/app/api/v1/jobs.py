@@ -26,8 +26,14 @@ async def create_job(
             detail="Only employers can post jobs.",
         )
     
-    job = await job_service.create_job(db=db, job_in=job_in, employer_id=current_user.id)
-    return job
+    try:
+        job = await job_service.create_job(db=db, job_in=job_in, employer_id=current_user.id)
+        return job
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to create job posting"
+        ) from e
 
 @router.get("/", response_model=list[JobRead])
 async def list_jobs(

@@ -25,7 +25,7 @@ describe("profileService", () => {
   });
 
   test("createProfile posts JSON when no avatar", async () => {
-    mock.onPost("/api/v1/profiles").reply((config) => {
+  mock.onPost("/api/v1/profiles/").reply((config) => {
       const rawData = config.data;
       if (typeof rawData === "string") {
         try {

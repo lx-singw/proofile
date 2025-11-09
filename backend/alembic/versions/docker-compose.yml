@@ -1,3 +1,6 @@
+# Proofile Development Environment
+# Docker Compose configuration for local development
+version: '3.8'
 
 services:
   postgres:
@@ -6,7 +9,7 @@ services:
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-proofile_dev}
       POSTGRES_USER: ${POSTGRES_USER:-proofile_user}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-proofile_password}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD environment variable is required}
       PGDATA: /var/lib/postgresql/data/pgdata
     ports:
       - "${POSTGRES_PORT:-5432}:5432"
@@ -47,6 +50,7 @@ services:
       dockerfile: Dockerfile
       target: development
     container_name: proofile-backend
+    restart: on-failure:3
     ports:
       - "${BACKEND_PORT:-8000}:8000"
     volumes:
@@ -64,7 +68,7 @@ services:
       redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -78,6 +82,7 @@ services:
       dockerfile: Dockerfile
       target: development
     container_name: proofile-frontend
+    restart: on-failure:3
     ports:
       - "${FRONTEND_PORT:-3000}:3000"
     volumes:
@@ -85,6 +90,7 @@ services:
       - frontend_cache:/app/.next/cache
     env_file:
       - .env
+    # Note: .env file is optional - service will use defaults if missing
     environment:
       - NEXT_PUBLIC_API_URL=http://backend:8000
       - NODE_ENV=development
@@ -96,7 +102,7 @@ services:
       backend:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000"]
+      test: ["CMD-SHELL", "curl -f http://localhost:3000 || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3

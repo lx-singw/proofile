@@ -13,6 +13,5 @@ class Profile(Base):
     summary = Column(Text)
     avatar_url = Column(String(255), nullable=True)
 
-    # This creates a back-reference so you can access the user from a profile object
-    # and the profile from a user object.
+    # Bidirectional relationship with User
     user = relationship("User", back_populates="profile")

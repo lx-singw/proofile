@@ -20,14 +20,17 @@ pool_size = settings.SQLALCHEMY_POOL_SIZE if settings.SQLALCHEMY_POOL_SIZE is no
 max_overflow = settings.SQLALCHEMY_MAX_OVERFLOW if settings.SQLALCHEMY_MAX_OVERFLOW is not None else 10
 pool_timeout = settings.SQLALCHEMY_POOL_TIMEOUT if settings.SQLALCHEMY_POOL_TIMEOUT is not None else 30
 
-engine = create_async_engine(
-    url.render_as_string(hide_password=False),
-    pool_pre_ping=True,
-    echo=sqlalchemy_echo,
-    pool_size=pool_size,
-    max_overflow=max_overflow,
-    pool_timeout=pool_timeout,
-)
+try:
+    engine = create_async_engine(
+        url.render_as_string(hide_password=False),
+        pool_pre_ping=True,
+        echo=sqlalchemy_echo,
+        pool_size=pool_size,
+        max_overflow=max_overflow,
+        pool_timeout=pool_timeout,
+    )
+except Exception as e:
+    raise RuntimeError(f"Failed to create database engine: {e}") from e
 
 # Typed session factory
 AsyncSessionLocal: sessionmaker[AsyncSession] = sessionmaker(

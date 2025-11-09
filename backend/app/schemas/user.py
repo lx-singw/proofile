@@ -45,3 +45,4 @@ class UserUpdate(BaseModel):
     full_name: Optional[str] = None
     password: Optional[str] = Field(None, min_length=8, max_length=72) # Add validation
     is_active: Optional[bool] = None
+    role: Optional[UserRole] = None

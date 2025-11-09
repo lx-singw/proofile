@@ -1,0 +1,30 @@
+#!/bin/bash
+set -euo pipefail
+
+# Wrapper around Snyk Code scanning for backend and frontend code.
+# Uses the locally installed snyk CLI if available, otherwise falls back to npx.
+
+if command -v snyk >/dev/null 2>&1; then
+    SNYK_BIN=("snyk")
+elif command -v npx >/dev/null 2>&1; then
+    SNYK_BIN=("npx" "--yes" "snyk")
+else
+    echo "snyk_code_scan: snyk CLI not found and npx unavailable. Install Snyk or Node.js tooling first." >&2
+    exit 1
+fi
+
+if [[ -z "${SNYK_TOKEN:-}" ]]; then
+    echo "snyk_code_scan: SNYK_TOKEN environment variable is required for authentication." >&2
+    exit 1
+fi
+
+run_scan() {
+    local target_dir="$1"
+    echo "🔍 Running Snyk Code scan in ${target_dir}..."
+    (cd "${target_dir}" && "${SNYK_BIN[@]}" code test --severity-threshold=medium)
+}
+
+run_scan "backend"
+run_scan "frontend"
+
+echo "✅ Snyk Code scan completed."

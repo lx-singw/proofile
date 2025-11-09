@@ -5,7 +5,7 @@ and adds a simple /health check endpoint so we can confirm everything is running
 """
 import logging
 import os
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.middleware.cors import CORSMiddleware
@@ -24,6 +24,9 @@ from app.api.v1.api import api_router
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(levelname)s:     %(message)s')
+logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
+logging.getLogger("uvicorn.error").setLevel(logging.WARNING)
+logging.getLogger("httpx").setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
 
 @asynccontextmanager
@@ -50,23 +53,40 @@ async def lifespan(app: FastAPI):
         logger.info(f"Database URL: {safe_url}")
     else:
         logger.error("DATABASE_URL is not set!")
+    RedisError = Exception  # Fallback when redis client is unavailable
     try:
         import redis.asyncio as redis
-        app.state.redis = redis.from_url(config.settings.REDIS_URL, encoding="utf8", decode_responses=True)
-        logger.info("Redis connection established.")
-    except Exception as e:
-        logger.warning(f"Redis connection skipped: {e}")
+        RedisError = redis.RedisError  # type: ignore[attr-defined]
+    except ImportError as e:
+        logger.warning(f"Redis client not installed, skipping connection: {e}")
         app.state.redis = None
+    else:
+        try:
+            app.state.redis = redis.from_url(
+                config.settings.REDIS_URL,
+                encoding="utf8",
+                decode_responses=True,
+            )
+            logger.info("Redis connection established.")
+        except (ConnectionError, RedisError) as e:
+            logger.warning(f"Redis connection skipped: {e}")
+            app.state.redis = None
+        except Exception as e:
+            logger.error(f"Unexpected error during Redis setup: {e}")
+            app.state.redis = None
 
     yield
 
     # Shutdown: Close connections
-    if getattr(app.state, "redis", None):
+    redis_client = getattr(app.state, "redis", None)
+    if redis_client:
         try:
-            await app.state.redis.close()
+            await redis_client.close()
             logger.info("Redis connection closed.")
-        except Exception:
-            pass
+        except (ConnectionError, RedisError) as e:
+            logger.warning(f"Error closing Redis connection: {e}")
+        except Exception as e:
+            logger.error(f"Unexpected error closing Redis connection: {e}")
     await database.dispose_engine()
 
 # Security headers middleware
@@ -195,6 +215,7 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
     # avoid filling logs during normal client-side validation failures.
     logger.debug("RequestValidationError caught: %s", exc)
     errors = []
+    status_code = status.HTTP_422_UNPROCESSABLE_ENTITY
     for error in exc.errors():
         error_dict = dict(error)
         if 'ctx' in error_dict and 'error' in error_dict['ctx']:
@@ -210,8 +231,11 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
             except UnicodeDecodeError:
                 error_dict['input'] = str(error_dict['input'])
                 
+        if error_dict.get("type") == "json_invalid":
+            status_code = status.HTTP_400_BAD_REQUEST
+
         errors.append(error_dict)
-    return JSONResponse(status_code=422, content={"detail": errors})
+    return JSONResponse(status_code=status_code, content={"detail": errors})
 
 @app.get("/health", tags=["health"])  # Lightweight readiness/liveness probe
 def health_check():

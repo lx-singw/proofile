@@ -19,15 +19,28 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         default_rate_limit: Tuple[int, int] = (60, 60) # Default if not provided
     ):
         super().__init__(app)
-        self.redis = Redis.from_url(redis_url, encoding="utf8", decode_responses=True)
+        try:
+            self.redis = Redis.from_url(redis_url, encoding="utf8", decode_responses=True)
+        except Exception as e:
+            logger.error(f"Failed to initialize Redis connection: {e}")
+            raise RuntimeError(f"Rate limiting initialization failed: {e}") from e
         self.default_rate_limit = default_rate_limit
         self.rate_limits = rate_limits or {} # Use provided or empty dict
 
     def get_rate_limit_key(self, request: Request) -> str:
         """Get the rate limit key based on the request path and client IP."""
         forwarded = request.headers.get("X-Forwarded-For")
-        client_ip = forwarded.split(",")[0] if forwarded else request.client.host
-        path = request.url.path
+        if forwarded:
+            # Sanitize forwarded IP to prevent injection
+            client_ip = forwarded.split(",")[0].strip()
+            # Validate IP format (basic validation)
+            if not client_ip.replace(".", "").replace(":", "").isalnum():
+                client_ip = "unknown"
+        else:
+            client_ip = getattr(request.client, 'host', 'unknown') or 'unknown'
+        
+        # Sanitize path to prevent injection
+        path = str(request.url.path).replace(":", "_").replace(";", "_")
         return f"rate_limit:{client_ip}:{path}"
 
     def get_limit_info(self, path: str) -> Tuple[int, int]:

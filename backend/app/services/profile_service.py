@@ -3,15 +3,20 @@ from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
 
 from app.models.profile import Profile
+from app.services import profile_cache
 from app.schemas.profile import ProfileCreate, ProfileUpdate
 
 
 async def get_profiles(db: AsyncSession, skip: int = 0, limit: int = 100) -> list[Profile]:
     """Retrieve profiles with pagination."""
     result = await db.execute(
-        select(Profile).offset(skip).limit(limit).order_by(Profile.id)
+        select(Profile)
+        .options(selectinload(Profile.user))
+        .offset(skip)
+        .limit(limit)
+        .order_by(Profile.id)
     )
-    return list(result.scalars().all())
+    return result.scalars().all()
 
 
 async def get_profile(db: AsyncSession, id: int) -> Profile | None:
@@ -32,6 +37,7 @@ async def create_profile(db: AsyncSession, profile_in: ProfileCreate, user_id: i
     db.add(new_profile)
     await db.commit()
     await db.refresh(new_profile)
+    await profile_cache.invalidate_profile(new_profile.id)
     return new_profile
 
 
@@ -48,18 +54,27 @@ async def update_profile(db: AsyncSession, profile: Profile, profile_in: Profile
         # This case is unlikely if the initial check passed, but it's good practice
         return None 
 
-    update_data = profile_in.model_dump(exclude_unset=True)
-    for field, value in update_data.items():
-        setattr(locked_profile, field, value)
-    
-    db.add(locked_profile)
-    await db.commit()
-    await db.refresh(locked_profile)
-    return locked_profile
+    try:
+        update_data = profile_in.model_dump(exclude_unset=True)
+        for field, value in update_data.items():
+            setattr(locked_profile, field, value)
+        
+        db.add(locked_profile)
+        await db.commit()
+        await db.refresh(locked_profile)
+        await profile_cache.invalidate_profile(locked_profile.id)
+        return locked_profile
+    except Exception as e:
+        await db.rollback()
+        raise RuntimeError(f"Failed to update profile: {e}") from e
 
 
 async def delete_profile(db: AsyncSession, profile: Profile) -> None:
     """Delete a profile."""
-    await db.delete(profile)
-    await db.commit()
-    return None
+    try:
+        await db.delete(profile)
+        await db.commit()
+        await profile_cache.invalidate_profile(profile.id)
+    except Exception as e:
+        await db.rollback()
+        raise RuntimeError(f"Failed to delete profile: {e}") from e
