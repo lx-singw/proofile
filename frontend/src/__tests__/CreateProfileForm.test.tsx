@@ -22,13 +22,7 @@ jest.mock("sonner", () => {
   return { __esModule: true, toast };
 });
 
-const { toast } = require("sonner") as {
-  toast: {
-    loading: jest.Mock;
-    success: jest.Mock;
-    error: jest.Mock;
-  };
-};
+import { toast } from "sonner";
 
 const createProfileMock = jest.fn();
 
