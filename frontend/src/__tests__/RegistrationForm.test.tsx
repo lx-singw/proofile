@@ -95,8 +95,9 @@ describe("RegistrationForm", () => {
   expect(toastMock.error).not.toHaveBeenCalled();
   });
 
-  it("shows toast for generic failures", async () => {
-    registerMock.mockRejectedValueOnce({ detail: "Registration failed" });
+  it("surfaces backend detail messages in toast", async () => {
+    const detailMessage = "A user with this email already exists.";
+    registerMock.mockRejectedValueOnce({ detail: detailMessage });
 
     render(<RegistrationForm />);
     const user = userEvent.setup();
@@ -105,9 +106,9 @@ describe("RegistrationForm", () => {
     await user.type(screen.getByLabelText("Password"), "Password123!");
     await user.click(screen.getByRole("button", { name: /create account/i }));
 
-    await waitFor(() => {
-  expect(toastMock.error).toHaveBeenCalledWith("Registration failed");
-    });
+      await waitFor(() => {
+        expect(toastMock.error).toHaveBeenCalledWith(detailMessage);
+      });
   });
 });
 
