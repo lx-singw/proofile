@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
+import DashboardHeader from "@/components/layout/DashboardHeader";
 import EditProfileForm from "@/components/profile/EditProfileForm";
 import { useAuth } from "@/hooks/useAuth";
 import { useProfile } from "@/hooks/useProfile";
@@ -36,14 +37,17 @@ export default function EditProfilePage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-8" data-testid="edit-profile-page">
-      <div className="w-full max-w-2xl space-y-6">
-        <div className="space-y-2">
-          <h1 className="text-3xl font-semibold">Edit profile</h1>
-          <p className="text-muted-foreground">Keep your details up to date to stay noticed.</p>
+    <div className="min-h-screen flex flex-col bg-gray-50" data-testid="edit-profile-page">
+      <DashboardHeader />
+      <main className="flex-1 flex items-center justify-center p-8">
+        <div className="w-full max-w-2xl space-y-6">
+          <div className="space-y-2">
+            <h1 className="text-3xl font-semibold">Edit profile</h1>
+            <p className="text-muted-foreground">Keep your details up to date to stay noticed.</p>
+          </div>
+          <EditProfileForm profile={profile} />
         </div>
-        <EditProfileForm profile={profile} />
-      </div>
+      </main>
     </div>
   );
 }

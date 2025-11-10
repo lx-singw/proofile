@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
+import DashboardHeader from "@/components/layout/DashboardHeader";
 import ProfileView from "@/components/profile/ProfileView";
 import { useAuth } from "@/hooks/useAuth";
 import { useProfile } from "@/hooks/useProfile";
@@ -36,10 +37,13 @@ export default function ProfilePage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-8" data-testid="profile-page">
-      <div className="w-full max-w-3xl">
-        <ProfileView profile={profile} />
-      </div>
+    <div className="min-h-screen flex flex-col bg-gray-50">
+      <DashboardHeader />
+      <main className="flex-1 flex items-center justify-center p-8" data-testid="profile-page">
+        <div className="w-full max-w-3xl">
+          <ProfileView profile={profile} />
+        </div>
+      </main>
     </div>
   );
 }

@@ -254,3 +254,49 @@ async def get_authenticated_user(current_user=Depends(deps.get_current_active_us
     Frontend will attempt /api/v1/auth/me as a fallback; exposing this makes probing cheaper.
     """
     return current_user
+
+
+@router.patch("/me", response_model=schemas.UserRead)
+async def update_user_settings(
+    payload: schemas.UserSettingsUpdate,
+    current_user=Depends(deps.get_current_active_user),
+    db: AsyncSession = Depends(deps.get_db),
+):
+    """Update authenticated user's settings (email, full_name, password).
+    
+    Requires current password verification for security.
+    """
+    from sqlalchemy import select
+    from app.models.user import User
+    
+    # Verify current password
+    if not security.pwd_context.verify(payload.current_password, current_user.hashed_password):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Current password is incorrect",
+        )
+    
+    # Update fields
+    if payload.email and payload.email.lower() != current_user.email:
+        # Check if new email already exists
+        result = await db.execute(
+            select(User).where(User.email == payload.email.lower()).where(User.id != current_user.id)
+        )
+        if result.scalars().first():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Email already in use",
+            )
+        current_user.email = payload.email.lower()
+    
+    if payload.full_name is not None:
+        current_user.full_name = payload.full_name
+    
+    if payload.new_password:
+        current_user.hashed_password = security.pwd_context.hash(payload.new_password)
+    
+    db.add(current_user)
+    await db.commit()
+    await db.refresh(current_user)
+    
+    return current_user

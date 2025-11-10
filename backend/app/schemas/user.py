@@ -48,3 +48,17 @@ class UserUpdate(BaseModel):
     password: Optional[str] = Field(None, min_length=8, max_length=72) # Add validation
     is_active: Optional[bool] = None
     role: Optional[UserRole] = None
+
+# --- Settings Update Schema ---
+# For user to update their own account settings (requires current password verification)
+class UserSettingsUpdate(BaseModel):
+    email: Optional[EmailStr] = None
+    full_name: Optional[str] = None
+    current_password: str = Field(..., description="Current password required to update settings")
+    new_password: Optional[str] = Field(None, min_length=8, max_length=72)
+
+    @field_validator("new_password")
+    def validate_new_password(cls, v: str, info) -> Optional[str]:
+        if v:
+            validate_password_strength(v)
+        return v
