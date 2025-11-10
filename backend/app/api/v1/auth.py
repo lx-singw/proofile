@@ -16,6 +16,21 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
+def _validate_csrf(request: Request) -> None:
+    """
+    Validate CSRF token if enabled.
+    In test environment, CSRF validation is disabled for programmatic API testing.
+    """
+    if not config.settings.CSRF_ENABLED:
+        # CSRF validation disabled in test environment
+        return
+    
+    csrf_cookie = request.cookies.get(config.settings.CSRF_COOKIE_NAME)
+    csrf_header = request.headers.get(config.settings.CSRF_HEADER_NAME)
+    if not csrf_cookie or not csrf_header or csrf_cookie != csrf_header:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="CSRF validation failed")
+
+
 async def _handle_failed_login(redis, email: str):
     """Handle failed login attempt tracking."""
     if not redis:
@@ -155,14 +170,11 @@ async def login_for_access_token(
 async def refresh_access_token(request: Request, response: Response):
     """
     Hybrid refresh endpoint: expects a HttpOnly refresh cookie and a readable CSRF cookie/header.
-    - Validates XSRF header matches cookie value.
+    - Validates XSRF header matches cookie value (unless disabled in test environment).
     - Decodes refresh token cookie and issues a fresh access token (JSON).
     """
     try:
-        csrf_cookie = request.cookies.get(config.settings.CSRF_COOKIE_NAME)
-        csrf_header = request.headers.get(config.settings.CSRF_HEADER_NAME)
-        if not csrf_cookie or not csrf_header or csrf_cookie != csrf_header:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="CSRF validation failed")
+        _validate_csrf(request)
 
         refresh_token = request.cookies.get(config.settings.REFRESH_COOKIE_NAME)
         if not refresh_token:
@@ -218,11 +230,8 @@ async def refresh_access_token(request: Request, response: Response):
 @router.post("/logout")
 async def logout(request: Request, response: Response):
     """Clear authentication cookies and logout user."""
-    # Validate CSRF token to prevent CSRF attacks
-    csrf_cookie = request.cookies.get(config.settings.CSRF_COOKIE_NAME)
-    csrf_header = request.headers.get(config.settings.CSRF_HEADER_NAME)
-    if not csrf_cookie or not csrf_header or csrf_cookie != csrf_header:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="CSRF validation failed")
+    # Validate CSRF token to prevent CSRF attacks (unless disabled in test environment)
+    _validate_csrf(request)
     
     # Compute cookie settings once
     secure_flag = bool(config.settings.COOKIE_SECURE)

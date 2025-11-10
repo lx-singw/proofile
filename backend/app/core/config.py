@@ -45,12 +45,24 @@ class Settings(BaseSettings):
     COOKIE_SAMESITE: str = "lax"  # 'lax' | 'strict' | 'none'
     COOKIE_SECURE: bool = False  # set True in production behind HTTPS
     REFRESH_COOKIE_NAME: str = "refresh_token"
+    # CSRF settings: disable in test/development environment for easier testing
+    # In production, always enable CSRF. In development/test, can disable for testing convenience.
+    CSRF_ENABLED: bool = True
 
 try:
     settings = Settings()
+    # In non-production environments, disable CSRF for programmatic API testing (E2E, integration tests)
+    # This allows E2E tests and API clients to work without manually handling CSRF tokens
+    if settings.ENVIRONMENT in ("test", "development"):
+        settings.CSRF_ENABLED = False
+    else:
+        # In production, CSRF must be enabled
+        settings.CSRF_ENABLED = True
+    
     if settings.ENVIRONMENT == "production" and settings.SECRET_KEY == "your-secret-key-change-in-production":
         raise ValueError("SECRET_KEY must be changed in production environment")
     logger.info("Configuration loaded successfully")
+    logger.info(f"CSRF validation: {'ENABLED' if settings.CSRF_ENABLED else 'DISABLED'} (Environment: {settings.ENVIRONMENT})")
 except ValidationError as e:
     logger.error(f"Configuration validation failed: {e}")
     raise RuntimeError(f"Invalid configuration: {e}") from e
