@@ -187,8 +187,8 @@ test.describe('Login Flow', () => {
     ]);
 
     await expect.poll(() => page.url(), { timeout: 15000 }).toMatch(/\/dashboard$/);
-    await expect(page.getByRole('heading', { name: /dashboard/i })).toBeVisible();
-  await expect(page.getByTestId('dashboard-user')).toContainText(email, { timeout: 20000 });
+    await expect(page.getByTestId('profile-status-card')).toBeVisible({ timeout: 15000 });
+    await expect(page.getByText(`Signed in as ${email}`)).toBeVisible({ timeout: 20000 });
   });
 
   test('persists session after refresh', async ({ page }) => {
@@ -206,11 +206,13 @@ test.describe('Login Flow', () => {
     ]);
 
     await expect.poll(() => page.url(), { timeout: 15000 }).toMatch(/\/dashboard$/);
-    await expect(page.getByRole('heading', { name: /dashboard/i })).toBeVisible();
+    await expect(page.getByTestId('profile-status-card')).toBeVisible({ timeout: 15000 });
+    await expect(page.getByText(`Signed in as ${email}`)).toBeVisible({ timeout: 20000 });
 
     await page.reload({ waitUntil: 'domcontentloaded' });
     await expect.poll(() => page.url(), { timeout: 15000 }).toMatch(/\/dashboard$/);
-    await expect(page.getByTestId('dashboard-user')).toContainText(email);
+    await expect(page.getByTestId('profile-status-card')).toBeVisible({ timeout: 15000 });
+    await expect(page.getByText(`Signed in as ${email}`)).toBeVisible({ timeout: 20000 });
   });
 
   test('clears session cookies and storage on logout', async ({ page, context }) => {
@@ -228,16 +230,22 @@ test.describe('Login Flow', () => {
     ]);
 
     await expect.poll(() => page.url(), { timeout: 15000 }).toMatch(/\/dashboard$/);
-    await expect(page.getByTestId('dashboard-user')).toContainText(email, { timeout: 20000 });
+    await expect(page.getByTestId('profile-status-card')).toBeVisible({ timeout: 15000 });
+    await expect(page.getByText(`Signed in as ${email}`)).toBeVisible({ timeout: 20000 });
 
     await expect.poll(async () => {
       const cookies = await context.cookies();
       return cookies.some((cookie) => cookie.name === 'refresh_token');
     }).toBeTruthy();
 
+    const accountMenuButton = page.getByRole('button', { name: /playwright login seed/i });
+    await accountMenuButton.click();
+
+    const signOutButton = page.getByRole('button', { name: /sign out/i });
+    await expect(signOutButton).toBeVisible();
     await Promise.all([
       page.waitForResponse((r: any) => r.url().includes('/api/v1/auth/logout') && r.status() >= 200 && r.status() < 300),
-      page.getByRole('button', { name: /sign out/i }).click(),
+      signOutButton.click(),
     ]);
 
     await expect.poll(() => page.url(), { timeout: 15000 }).toMatch(/\/login$/);

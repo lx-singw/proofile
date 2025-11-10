@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
 import { useProfile } from "@/hooks/useProfile";
@@ -12,6 +12,20 @@ export default function DashboardPage() {
   const router = useRouter();
   const { user, loading } = useAuth();
   const { data: profile, isLoading: profileLoading } = useProfile({ enabled: Boolean(user) });
+
+  const [bannerDismissed, setBannerDismissed] = useState(false);
+
+  useEffect(() => {
+    // read persisted banner dismissal from localStorage
+    try {
+      if (typeof window !== "undefined") {
+        const v = window.localStorage.getItem("profileBannerDismissed");
+        if (v === "1") setBannerDismissed(true);
+      }
+    } catch (e) {
+      // ignore storage errors
+    }
+  }, []);
 
   useEffect(() => {
     if (!loading && !user) {
@@ -79,7 +93,7 @@ export default function DashboardPage() {
             <div className="p-4 border rounded bg-muted/50">
               <p className="text-muted-foreground">Loading profile status...</p>
             </div>
-          ) : !profile ? (
+          ) : !profile && !bannerDismissed ? (
             <div className="rounded-lg border border-blue-200 bg-blue-50 p-6 space-y-3" data-testid="profile-status-banner">
               <div>
                 <h3 className="font-semibold text-blue-900">📝 Complete Your Professional Profile</h3>
@@ -91,7 +105,18 @@ export default function DashboardPage() {
                 <Button asChild size="sm">
                   <Link href="/profile/create">Create Professional Profile</Link>
                 </Button>
-                <Button variant="ghost" size="sm">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    try {
+                      if (typeof window !== "undefined") {
+                        window.localStorage.setItem("profileBannerDismissed", "1");
+                      }
+                    } catch {}
+                    setBannerDismissed(true);
+                  }}
+                >
                   Maybe Later
                 </Button>
               </div>

@@ -179,13 +179,13 @@ const loginUserViaUi = async (page: any, { email, password }: { email: string; p
     page.getByRole('button', { name: /sign in/i }).click(),
   ]);
 
-  await page.waitForURL(/\/(dashboard|profile\/create)(?:\/?|$)/, { timeout: NAVIGATION_TIMEOUT });
+  await page.waitForURL(/\/dashboard(?:\/?|$)/, { timeout: NAVIGATION_TIMEOUT });
+  await expect(page).toHaveURL(/\/dashboard(?:\/?|$)/, { timeout: NAVIGATION_TIMEOUT });
   await page.waitForTimeout(500);
   const cookieSnapshot = await page.evaluate(() => document.cookie);
   // eslint-disable-next-line no-console
   console.log('[loginUserViaUi] cookies:', cookieSnapshot);
-  await page.waitForURL(/\/profile\/create(?:\/?|$)/, { timeout: NAVIGATION_TIMEOUT });
-  await expect(page.getByTestId('create-profile-heading')).toBeVisible({ timeout: NAVIGATION_TIMEOUT });
+  await expect(page.getByTestId('profile-status-banner')).toBeVisible({ timeout: NAVIGATION_TIMEOUT });
 };
 
 const createProfileViaUi = async (
@@ -269,6 +269,10 @@ test.describe('Registration to Profile Flow', () => {
 
     await registerUserViaUi(page, { email, password });
     await loginUserViaUi(page, { email, password });
+    await Promise.all([
+      page.waitForURL(/\/profile\/create(?:\/?|$)/, { timeout: NAVIGATION_TIMEOUT }),
+      page.getByRole('link', { name: /create professional profile/i }).click(),
+    ]);
     await createProfileViaUi(page, { headline, summary });
     await expect(page.getByTestId('profile-edit')).toBeVisible({ timeout: NAVIGATION_TIMEOUT });
   });
@@ -283,6 +287,10 @@ test.describe('Registration to Profile Flow', () => {
 
     await registerUserViaUi(page, { email, password });
     await loginUserViaUi(page, { email, password });
+    await Promise.all([
+      page.waitForURL(/\/profile\/create(?:\/?|$)/, { timeout: NAVIGATION_TIMEOUT }),
+      page.getByRole('link', { name: /create professional profile/i }).click(),
+    ]);
     await createProfileViaUi(page, { headline: initialHeadline, summary: initialSummary });
     await editProfileViaUi(page, { headline: updatedHeadline, summary: updatedSummary });
   });
@@ -300,14 +308,19 @@ test.describe('Profile Flow', () => {
     });
   });
 
-  test('redirects new user to profile creation', async ({ page }) => {
+  test('shows profile banner and allows navigation to profile creation', async ({ page }) => {
     const email = `profile-create-${UNIQUE_PREFIX()}@example.com`;
     const password = 'SuperSecret123!';
     await ensureProfileTestUser(email, password);
 
     await loginViaApi(page, email, password);
     await gotoWithRetry(page, '/dashboard');
-    await expect(page).toHaveURL(/\/profile\/create(?:\/?|$)/, { timeout: NAVIGATION_TIMEOUT });
+    await expect(page).toHaveURL(/\/dashboard(?:\/?|$)/, { timeout: NAVIGATION_TIMEOUT });
+    await expect(page.getByTestId('profile-status-banner')).toBeVisible({ timeout: NAVIGATION_TIMEOUT });
+    await Promise.all([
+      page.waitForURL(/\/profile\/create(?:\/?|$)/, { timeout: NAVIGATION_TIMEOUT }),
+      page.getByRole('link', { name: /create professional profile/i }).click(),
+    ]);
     await expect(page.getByTestId('create-profile-heading')).toBeVisible({ timeout: NAVIGATION_TIMEOUT });
   });
 
