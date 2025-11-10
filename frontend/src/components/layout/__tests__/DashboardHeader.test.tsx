@@ -2,6 +2,7 @@ import React from "react";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import DashboardHeader from "../DashboardHeader";
+import * as useAuthModule from "@/hooks/useAuth";
 
 // Mock the auth hook
 jest.mock("@/hooks/useAuth", () => ({
@@ -198,19 +199,19 @@ describe("DashboardHeader", () => {
   });
 
   it("returns null when user is not authenticated", () => {
-    // Re-mock useAuth to return no user
-    jest.mock("@/hooks/useAuth", () => ({
-      useAuth: () => ({
-        user: null,
-        logout: jest.fn(),
-      }),
+    // Spy on the useAuth export to return no user for this test
+    const spy = jest.spyOn(useAuthModule, "useAuth").mockImplementation(() => ({
+      user: null,
+      logout: jest.fn(),
     }));
 
-    // Clear previous render
     const { container } = render(<DashboardHeader />);
 
-    // When user is null, header returns null, so component tree is empty
+    // When user is null, header returns null, so component tree should be empty
     expect(container.firstChild).toBeNull();
+
+    // Restore mock
+    spy.mockRestore();
   });
 
   it("displays user full name on desktop", () => {
