@@ -1,6 +1,8 @@
 "use client";
 
 import React from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -27,6 +29,7 @@ export const registrationSchema = z.object({
 type FormValues = z.infer<typeof registrationSchema>;
 
 export default function RegistrationForm() {
+  const router = useRouter();
   const { register: registerUser } = useAuth();
   const isRecord = (value: unknown): value is Record<string, unknown> =>
     typeof value === "object" && value !== null;
@@ -74,6 +77,15 @@ export default function RegistrationForm() {
       const rawFieldErrors = isRecord(err)
         ? (err["errors"] ?? err["field_errors"])
         : undefined;
+
+      // Check if email already exists → redirect to login
+      if (detail?.includes("already exists") || detail?.includes("Email")) {
+        setError("email", {
+          type: "server",
+          message: "Email already in use. Log in instead.",
+        });
+        return;
+      }
 
       if (isRecord(rawFieldErrors)) {
         Object.entries(rawFieldErrors).forEach(([name, messages]) => {
@@ -139,6 +151,13 @@ export default function RegistrationForm() {
         <Button type="submit" disabled={isSubmitting} className="w-full">
           {isSubmitting ? "Creating…" : "Create account"}
         </Button>
+      </div>
+
+      <div className="text-center text-sm text-gray-600">
+        Already have an account?{" "}
+        <Link href="/login" className="font-medium text-blue-600 hover:text-blue-700">
+          Sign in
+        </Link>
       </div>
     </form>
   );

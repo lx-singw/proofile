@@ -96,7 +96,7 @@ describe("RegistrationForm", () => {
   });
 
   it("surfaces backend detail messages in toast", async () => {
-    const detailMessage = "A user with this email already exists.";
+    const detailMessage = "An unexpected error occurred.";
     registerMock.mockRejectedValueOnce({ detail: detailMessage });
 
     render(<RegistrationForm />);
@@ -109,6 +109,21 @@ describe("RegistrationForm", () => {
       await waitFor(() => {
         expect(toastMock.error).toHaveBeenCalledWith(detailMessage);
       });
+  });
+
+  it("detects duplicate email and shows field error", async () => {
+    const detailMessage = "A user with this email already exists.";
+    registerMock.mockRejectedValueOnce({ detail: detailMessage });
+
+    render(<RegistrationForm />);
+    const user = userEvent.setup();
+
+    await user.type(screen.getByLabelText("Email"), "duplicate@example.com");
+    await user.type(screen.getByLabelText("Password"), "Password123!");
+    await user.click(screen.getByRole("button", { name: /create account/i }));
+
+    expect(await screen.findByText(/email already in use\. log in instead\./i)).toBeInTheDocument();
+    expect(toastMock.error).not.toHaveBeenCalled();
   });
 });
 

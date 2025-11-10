@@ -53,6 +53,12 @@ export default function DashboardPage() {
   const primaryName = user.full_name || user.username || user.email || "your account";
   const shouldShowEmail = Boolean(user.email && user.email !== primaryName);
 
+  // Detect new users (created within last 5 minutes)
+  const isNewUser = user.created_at
+    ? new Date().getTime() - new Date(user.created_at).getTime() < 5 * 60 * 1000
+    : false;
+  const greeting = isNewUser ? "Welcome to Proofile!" : `Welcome back, ${primaryName}!`;
+
   return (
     <div className="min-h-screen flex flex-col p-8">
       <div className="w-full max-w-4xl mx-auto space-y-6">
@@ -66,7 +72,7 @@ export default function DashboardPage() {
 
         {/* Welcome Section */}
         <div>
-          <h2 className="text-xl font-semibold mb-1">Welcome back, {primaryName}!</h2>
+          <h2 className="text-xl font-semibold mb-1">{greeting}</h2>
           <p className="text-muted-foreground">
             Signed in as {user.email}
           </p>

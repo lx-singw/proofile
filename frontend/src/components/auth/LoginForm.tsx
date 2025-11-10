@@ -4,11 +4,13 @@ import React from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { useRouter } from "next/navigation";
 import { useAuth } from "../../hooks/useAuth";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { ErrorMessage } from "@/components/ui/error-message";
+import Link from "next/link";
 
 export const loginSchema = z.object({
   username: z.string().min(1, "Email is required").email("Enter a valid email"),
@@ -18,6 +20,7 @@ export const loginSchema = z.object({
 type FormValues = z.infer<typeof loginSchema>;
 
 export default function LoginForm() {
+  const router = useRouter();
   const { register, handleSubmit, formState: { errors, isSubmitting }, setError } = useForm<FormValues>({
     resolver: zodResolver(loginSchema),
     mode: "onBlur",
@@ -31,6 +34,19 @@ export default function LoginForm() {
     try {
       await login({ username: data.username, password: data.password });
     } catch (err: unknown) {
+      // Check if account doesn't exist → redirect to signup
+      const detail = isRecord(err) && typeof err["detail"] === "string" ? err["detail"] : "";
+      
+      if (detail === "Incorrect email or password") {
+        // Could be either wrong password OR account doesn't exist
+        // For better UX, show a friendly message with signup link
+        setError("username", {
+          type: "server",
+          message: "Account not found. Create one to get started.",
+        });
+        return;
+      }
+
       // Show a generic auth error to avoid enumeration
       const generic = "Invalid email or password";
       const rawFieldErrors = isRecord(err)
@@ -83,6 +99,13 @@ export default function LoginForm() {
         <Button type="submit" disabled={isSubmitting} className="w-full">
           {isSubmitting ? "Signing in…" : "Sign in"}
         </Button>
+      </div>
+
+      <div className="text-center text-sm text-gray-600">
+        Don't have an account?{" "}
+        <Link href="/register" className="font-medium text-blue-600 hover:text-blue-700">
+          Sign up
+        </Link>
       </div>
     </form>
   );

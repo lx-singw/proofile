@@ -6,6 +6,7 @@ providing validation and serialization.
 """
 from pydantic import BaseModel, EmailStr, Field, ConfigDict, field_validator
 from typing import Optional
+from datetime import datetime
 from app.models.user import UserRole
 from app.core.security import validate_password_strength
 
@@ -36,6 +37,7 @@ class UserCreate(UserBase):
 class UserRead(UserBase):
     id: int
     is_active: bool
+    created_at: Optional[datetime] = None
     model_config = ConfigDict(from_attributes=True)
 
 # --- Update Schema ---
