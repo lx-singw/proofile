@@ -89,7 +89,7 @@ export default function DashboardPage() {
               </div>
               <div className="flex gap-2">
                 <Button asChild size="sm">
-                  <Link href="/profile/create">Create Profile</Link>
+                  <Link href="/profile/create">Create Professional Profile</Link>
                 </Button>
                 <Button variant="ghost" size="sm">
                   Maybe Later

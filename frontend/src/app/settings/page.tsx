@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
 import DashboardHeader from "@/components/layout/DashboardHeader";
@@ -116,13 +117,11 @@ export default function SettingsPage() {
 
       <main className="flex-1 max-w-2xl mx-auto w-full px-8 py-8">
         <div className="space-y-6">
-          {/* Header */}
-          <div>
-            <h1 className="text-3xl font-semibold">Account Settings</h1>
-            <p className="text-gray-600 mt-1">Manage your email, password, and profile information</p>
-          </div>
-
-          {/* Settings Form */}
+        {/* Header */}
+        <div>
+          <h1 className="text-3xl font-semibold">Account Settings</h1>
+          <p className="text-gray-600 mt-1">Manage your account email, password, and personal information. To update your professional profile, visit your <Link href="/profile/edit" className="text-blue-600 hover:text-blue-700 font-medium">Professional Profile</Link>.</p>
+        </div>          {/* Settings Form */}
           <form onSubmit={handleSubmit(onSubmit)} className="bg-white rounded-lg border p-6 space-y-5">
             {/* Email Section */}
             <div>
