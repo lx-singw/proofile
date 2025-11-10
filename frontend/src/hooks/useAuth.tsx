@@ -122,14 +122,14 @@ const AuthState: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     await queryClient.invalidateQueries({ queryKey: ME_QUERY_KEY });
   };
 
-  const isLoading = bootstrapping || loading;
+  const isLoading = bootstrapping || (loading && user !== null);
 
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div>
           <p>Loading...</p>
-          <p className="text-xs text-gray-500 mt-2">bootstrapping: {bootstrapping ? "yes" : "no"}, loading: {loading ? "yes" : "no"}</p>
+          <p className="text-xs text-gray-500 mt-2">bootstrapping: {bootstrapping ? "yes" : "no"}, loading: {loading ? "yes" : "no"}, user: {user ? "yes" : "no"}</p>
         </div>
       </div>
     );
