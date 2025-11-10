@@ -3,81 +3,127 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import { useAuth } from "@/hooks/useAuth";
-import { Button } from "@/components/ui/button";
+import DashboardDropdown from "./DashboardDropdown";
+import SearchBar from "./SearchBar";
+import NotificationBell from "./NotificationBell";
+import CreateButton from "./CreateButton";
+import MobileMenu from "./MobileMenu";
+import MobileDrawer from "./MobileDrawer";
+import { Settings, LogOut, LayoutDashboard, FileText } from "lucide-react";
 
-export default function DashboardHeader() {
+interface DashboardHeaderProps {
+  unreadNotifications?: number;
+}
+
+/**
+ * DashboardHeader
+ * 
+ * Main header component for dashboard pages.
+ * Features:
+ * - Left section: Logo & dropdown menu
+ * - Center: Search bar (hidden on mobile)
+ * - Right section: Notifications, create button, user menu
+ * - Mobile drawer for navigation
+ * - Sticky positioning
+ */
+export default function DashboardHeader({
+  unreadNotifications = 0,
+}: DashboardHeaderProps) {
   const { user, logout } = useAuth();
-  const [menuOpen, setMenuOpen] = useState(false);
+  const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
 
   if (!user) return null;
 
   const handleLogout = async () => {
-    setMenuOpen(false);
+    setMobileDrawerOpen(false);
     await logout();
   };
 
   return (
-    <header className="border-b bg-white sticky top-0 z-40">
-      <div className="flex justify-between items-center px-8 py-4 max-w-6xl mx-auto">
-        {/* Logo */}
-        <Link href="/dashboard" className="text-2xl font-bold text-blue-600">
-          Proofile
-        </Link>
-
-        {/* User Menu Dropdown */}
-        <div className="relative">
-          <button
-            onClick={() => setMenuOpen(!menuOpen)}
-            className="flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors"
-            aria-expanded={menuOpen}
-            aria-haspopup="true"
-          >
-            <span className="text-sm font-medium">{user.full_name || user.email}</span>
-            <svg
-              className={`w-4 h-4 transition-transform ${menuOpen ? "rotate-180" : ""}`}
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
+    <>
+      {/* Main Header */}
+      <header className="border-b border-gray-200 bg-white sticky top-0 z-40 dark:border-gray-700 dark:bg-gray-900">
+        <div className="flex items-center justify-between px-4 sm:px-6 lg:px-8 py-4 max-w-7xl mx-auto w-full">
+          {/* Left Section: Logo & Mobile Menu */}
+          <div className="flex items-center gap-4">
+            <MobileMenu
+              onClick={() => setMobileDrawerOpen(true)}
+              isOpen={mobileDrawerOpen}
+            />
+            <Link
+              href="/dashboard"
+              className="text-xl font-bold text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 transition-colors"
             >
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
-            </svg>
-          </button>
+              Proofile
+            </Link>
+          </div>
 
-          {/* Dropdown Menu */}
-          {menuOpen && (
-            <div className="absolute right-0 mt-2 w-48 rounded-lg border border-gray-200 bg-white shadow-lg py-1 z-50">
-              <Link
-                href="/dashboard"
-                onClick={() => setMenuOpen(false)}
-                className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
-              >
-                📊 Dashboard
-              </Link>
-              <Link
-                href="/profile"
-                onClick={() => setMenuOpen(false)}
-                className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
-              >
-                👤 Professional Profile
-              </Link>
-              <Link
-                href="/settings"
-                onClick={() => setMenuOpen(false)}
-                className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
-              >
-                ⚙️ Account Settings
-              </Link>
-              <hr className="my-1" />
-              <button
-                onClick={handleLogout}
-                className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"
-              >
-                🚪 Sign Out
-              </button>
-            </div>
-          )}
+          {/* Center Section: Search Bar (hidden on mobile) */}
+          <div className="hidden md:block flex-1 mx-4 lg:mx-8">
+            <SearchBar placeholder="Search your profile..." />
+          </div>
+
+          {/* Right Section: Notifications, Create Button, User Menu */}
+          <div className="flex items-center gap-2 sm:gap-4">
+            {/* Notifications */}
+            <NotificationBell unreadCount={unreadNotifications} />
+
+            {/* Create Button */}
+            <CreateButton ariaLabel="Create new item" />
+
+            {/* User Menu Dropdown */}
+            <DashboardDropdown
+              trigger={
+                <div className="flex items-center gap-2">
+                  <span className="hidden sm:inline text-sm font-medium text-gray-700 dark:text-gray-300">
+                    {user.full_name || user.email.split("@")[0]}
+                  </span>
+                  <div className="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center text-xs font-bold">
+                    {(user.full_name || user.email).charAt(0).toUpperCase()}
+                  </div>
+                </div>
+              }
+              items={[
+                {
+                  label: "Dashboard",
+                  href: "/dashboard",
+                  icon: <LayoutDashboard className="w-4 h-4" />,
+                },
+                {
+                  label: "Professional Profile",
+                  href: "/profile",
+                  icon: <FileText className="w-4 h-4" />,
+                },
+                {
+                  label: "Account Settings",
+                  href: "/settings",
+                  icon: <Settings className="w-4 h-4" />,
+                },
+                {
+                  label: "Sign Out",
+                  href: "/logout",
+                  icon: <LogOut className="w-4 h-4" />,
+                  divider: true,
+                },
+              ]}
+              align="right"
+              onItemClick={(item) => {
+                if (item.label === "Sign Out") {
+                  handleLogout();
+                }
+              }}
+            />
+          </div>
         </div>
-      </div>
-    </header>
+      </header>
+
+      {/* Mobile Drawer */}
+      <MobileDrawer
+        isOpen={mobileDrawerOpen}
+        onClose={() => setMobileDrawerOpen(false)}
+        user={user}
+        onLogout={handleLogout}
+      />
+    </>
   );
 }
