@@ -67,6 +67,9 @@ export default function DashboardPage() {
 
   const primaryName = user.full_name || user.username || user.email || "your account";
   const shouldShowEmail = Boolean(user.email && user.email !== primaryName);
+  const hasProfile = Boolean(profile);
+  const profileHeadline = profile?.headline ?? "Your Profile";
+  const profileSummary = profile?.summary ?? "No summary yet.";
 
   // Detect new users (created within last 5 minutes)
   const isNewUser = user.created_at && typeof user.created_at === 'string'
@@ -124,18 +127,26 @@ export default function DashboardPage() {
           ) : (
             <div className="rounded-lg border bg-card p-6 space-y-4" data-testid="profile-status-card">
               <div className="space-y-1">
-                <h3 className="text-lg font-semibold">{profile.headline || "Your Profile"}</h3>
+                <h3 className="text-lg font-semibold">{profileHeadline}</h3>
                 <p className="text-muted-foreground text-sm line-clamp-2">
-                  {profile.summary || "No summary yet."}
+                  {profileSummary}
                 </p>
               </div>
               <div className="flex flex-wrap gap-2">
-                <Button asChild size="sm">
-                  <Link href="/profile">View Profile</Link>
-                </Button>
-                <Button asChild size="sm" variant="outline">
-                  <Link href="/profile/edit">Edit Profile</Link>
-                </Button>
+                {hasProfile ? (
+                  <>
+                    <Button asChild size="sm">
+                      <Link href="/profile">View Profile</Link>
+                    </Button>
+                    <Button asChild size="sm" variant="outline">
+                      <Link href="/profile/edit">Edit Profile</Link>
+                    </Button>
+                  </>
+                ) : (
+                  <Button asChild size="sm">
+                    <Link href="/profile/create">Create Professional Profile</Link>
+                  </Button>
+                )}
               </div>
             </div>
           )}
