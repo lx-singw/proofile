@@ -28,16 +28,9 @@ export default function DashboardPage() {
         profile,
       });
     }
-    if (!loading && user && !profileLoading && profile === null) {
-      if (process.env.NODE_ENV !== "production") {
-        // eslint-disable-next-line no-console
-        console.log("[dashboard] redirecting to /profile/create");
-      }
-      router.replace("/profile/create");
-    }
-  }, [loading, user, profile, profileLoading, router]);
+  }, [loading, user, profile, profileLoading]);
 
-  if (loading || profileLoading) {
+  if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center p-8">
         <p className="text-lg" aria-live="polite">
@@ -60,41 +53,74 @@ export default function DashboardPage() {
   const primaryName = user.full_name || user.username || user.email || "your account";
   const shouldShowEmail = Boolean(user.email && user.email !== primaryName);
 
-  if (profile == null) {
-    return (
-      <div className="min-h-screen flex items-center justify-center p-8" data-testid="dashboard-profile-redirect">
-        <p className="text-muted-foreground">Let&apos;s create your profile to unlock the dashboard...</p>
-      </div>
-    );
-  }
-
   return (
-    <div className="min-h-screen flex items-center justify-center p-8">
-      <div className="w-full max-w-2xl space-y-4">
-        <div className="flex justify-between items-center">
+    <div className="min-h-screen flex flex-col p-8">
+      <div className="w-full max-w-4xl mx-auto space-y-6">
+        {/* Header */}
+        <div className="flex justify-between items-center border-b pb-4">
           <h1 className="text-3xl font-semibold">Dashboard</h1>
           <Button onClick={logout} variant="outline" size="sm">
             Sign Out
           </Button>
         </div>
-        <p data-testid="dashboard-user" className="text-muted-foreground">
-          Signed in as {primaryName}
-          {shouldShowEmail ? ` (${user.email})` : ""}
-        </p>
-        <div className="rounded-lg border bg-card p-6 shadow-sm space-y-4" data-testid="dashboard-profile-summary">
-          <div className="space-y-1">
-            <h2 className="text-xl font-semibold">Your profile</h2>
-            <p className="text-muted-foreground">
-              {profile.summary || "Add a short summary to help employers get to know you."}
-            </p>
+
+        {/* Welcome Section */}
+        <div>
+          <h2 className="text-xl font-semibold mb-1">Welcome back, {primaryName}!</h2>
+          <p className="text-muted-foreground">
+            Signed in as {user.email}
+          </p>
+        </div>
+
+        {/* Profile Status Banner/Card */}
+        {profileLoading ? (
+          <div className="p-4 border rounded bg-muted/50">
+            <p className="text-muted-foreground">Loading profile status...</p>
           </div>
-          <div className="flex flex-wrap gap-3">
-            <Button asChild size="sm">
-              <Link href="/profile">View profile</Link>
+        ) : !profile ? (
+          <div className="rounded-lg border border-blue-200 bg-blue-50 p-6 space-y-3" data-testid="profile-status-banner">
+            <div>
+              <h3 className="font-semibold text-blue-900">📝 Complete Your Professional Profile</h3>
+              <p className="text-sm text-blue-800 mt-1">
+                Stand out to employers by adding your headline, summary, and work experience.
+              </p>
+            </div>
+            <div className="flex gap-2">
+              <Button asChild size="sm">
+                <Link href="/profile/create">Create Profile</Link>
+              </Button>
+              <Button variant="ghost" size="sm">
+                Maybe Later
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <div className="rounded-lg border bg-card p-6 space-y-4" data-testid="profile-status-card">
+            <div className="space-y-1">
+              <h3 className="text-lg font-semibold">{profile.headline || "Your Profile"}</h3>
+              <p className="text-muted-foreground text-sm line-clamp-2">
+                {profile.summary || "No summary yet."}
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button asChild size="sm">
+                <Link href="/profile">View Profile</Link>
+              </Button>
+              <Button asChild size="sm" variant="outline">
+                <Link href="/profile/edit">Edit Profile</Link>
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* Quick Actions */}
+        <div className="space-y-2">
+          <h3 className="font-semibold">Quick Actions</h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <Button asChild variant="outline" className="justify-start">
+              <Link href="/settings">⚙️ Account Settings</Link>
             </Button>
-            <Button asChild size="sm" variant="outline" data-testid="dashboard-edit-profile">
-              <Link href="/profile/edit">Edit profile</Link>
-            </Button>
+            {/* Future: Browse jobs, view applications, etc. */}
           </div>
         </div>
       </div>
