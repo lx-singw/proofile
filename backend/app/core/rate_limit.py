@@ -50,17 +50,20 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
     async def is_rate_limited(self, key: str, max_requests: int, window: int) -> Tuple[bool, int]:
         """Check if the request should be rate limited."""
         try:
-            # Use Redis to track request count
-            pipe = self.redis.pipeline()
             current_time = int(time.time())
-            # Remove old entries (outside current window)
             clear_before = current_time - window
             
-            await pipe.zremrangebyscore(key, 0, clear_before)
-            await pipe.zadd(key, {str(current_time): current_time})
-            await pipe.zcard(key)
-            await pipe.expire(key, window)
-            _, _, request_count, _ = await pipe.execute()
+            # Remove old entries (outside current window)
+            await self.redis.zremrangebyscore(key, 0, clear_before)
+            
+            # Add current request
+            await self.redis.zadd(key, {str(current_time): current_time})
+            
+            # Get current count
+            request_count = await self.redis.zcard(key)
+            
+            # Set expiry
+            await self.redis.expire(key, window)
 
             # Check if we've hit the limit
             if request_count > max_requests:

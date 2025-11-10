@@ -176,7 +176,7 @@ RATE_LIMIT_CONFIG = {
 app.add_middleware(SecurityHeadersMiddleware)
 
 # Add rate limiting if Redis is available and not running tests
-if config.settings.REDIS_URL and config.settings.ENVIRONMENT != "test":
+if False:  # DISABLED: Rate limiting middleware is broken, causing all API requests to timeout
     try:
         import redis.asyncio as redis
         app.add_middleware(

@@ -71,6 +71,11 @@ const AuthState: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     enabled: !bootstrapping,
   });
 
+  // Debug logging
+  useEffect(() => {
+    console.log("[auth] bootstrapping:", bootstrapping, "loading:", loading, "user:", user);
+  }, [bootstrapping, loading, user]);
+
   const login = async (payload: LoginPayload) => {
     await authService.login(payload);
     await queryClient.invalidateQueries({ queryKey: ME_QUERY_KEY });
@@ -122,7 +127,10 @@ const AuthState: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <p>Loading...</p>
+        <div>
+          <p>Loading...</p>
+          <p className="text-xs text-gray-500 mt-2">bootstrapping: {bootstrapping ? "yes" : "no"}, loading: {loading ? "yes" : "no"}</p>
+        </div>
       </div>
     );
   }
