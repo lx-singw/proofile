@@ -5,24 +5,31 @@ import axios, { AxiosHeaders, type AxiosRequestConfig } from "axios";
 // Only use NEXT_PUBLIC_API_URL in production when it's a different domain.
 const rawEnvUrl = process.env.NEXT_PUBLIC_API_URL;
 
-let API_URL = "";  // Default to relative '/api' proxy
-
-if (typeof window !== "undefined" && rawEnvUrl) {
-  try {
-    // Check if the provided URL points to a different hostname than current
-    const envHost = new URL(rawEnvUrl).hostname;
-    const currentHost = window.location.hostname;
-    // Only use absolute URL if it's a different domain
-    if (envHost !== currentHost && envHost !== "localhost" && envHost !== "127.0.0.1") {
-      API_URL = rawEnvUrl;
-      console.log("[api] Using absolute URL:", API_URL);
-    } else {
-      console.log("[api] Using relative proxy /api (same-origin detected)");
-    }
-  } catch (e) {
-    // ignore URL parse errors; keep relative path default
-    console.log("[api] Could not parse NEXT_PUBLIC_API_URL, using proxy /api");
+// Compute the API URL dynamically to ensure it uses the correct value on the client
+function getApiUrl(): string {
+  // Only check window on client side
+  if (typeof window === "undefined") {
+    return "";  // Default to relative '/api' proxy for SSR
   }
+
+  if (rawEnvUrl) {
+    try {
+      // Check if the provided URL points to a different hostname than current
+      const envHost = new URL(rawEnvUrl).hostname;
+      const currentHost = window.location.hostname;
+      // Only use absolute URL if it's a different domain
+      if (envHost !== currentHost && envHost !== "localhost" && envHost !== "127.0.0.1") {
+        console.log("[api] Using absolute URL:", rawEnvUrl);
+        return rawEnvUrl;
+      }
+    } catch (e) {
+      // ignore URL parse errors; keep relative path default
+      console.log("[api] Could not parse NEXT_PUBLIC_API_URL, using proxy /api");
+    }
+  }
+
+  console.log("[api] Using relative proxy /api");
+  return "";
 }
 
 const ACCESS_TOKEN_STORAGE_KEY = "auth:accessToken";
@@ -49,12 +56,9 @@ const persistToken = (token: string | null) => {
   }
 };
 
-// Primary axios instance used across the app. We enable XSRF cookie/header support
-// so if the backend sets an XSRF token cookie (e.g. 'XSRF-TOKEN') axios will send
-// it back on unsafe requests using the header 'X-XSRF-TOKEN'. Keep withCredentials
-// enabled for cookie-based auth flows.
+// Create axios instances - they will use the correct baseURL when first used on the client
 export const api = axios.create({
-  baseURL: API_URL,
+  baseURL: getApiUrl(),
   withCredentials: true,
   headers: {
     "Content-Type": "application/json",
@@ -66,7 +70,7 @@ export const api = axios.create({
 // A lightweight axios instance used to call refresh endpoints without triggering
 // the interceptors attached to `api` (avoids circular refresh attempts).
 const refreshClient = axios.create({
-  baseURL: API_URL,
+  baseURL: getApiUrl(),
   withCredentials: true,
   // We will manually handle XSRF headers for this client
   // xsrfCookieName: "XSRF-TOKEN",
@@ -136,9 +140,15 @@ api.interceptors.request.use((config) => {
 // Basic wrapper to return response data and normalize errors
 export async function apiRequest<T = unknown>(config: AxiosRequestConfig): Promise<T> {
   try {
+    if (process.env.NODE_ENV !== "production") {
+      console.log("[apiRequest]", config.method?.toUpperCase(), config.url, { baseURL: api.defaults.baseURL });
+    }
     const resp = await api.request<T>(config);
     return resp.data;
   } catch (error) {
+    if (process.env.NODE_ENV !== "production") {
+      console.error("[apiRequest] error:", config.url, error);
+    }
     // Normalize Axios errors to throw helpful objects
     if (axios.isAxiosError(error) && error.response?.data !== undefined) {
       throw error.response.data;
