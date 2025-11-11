@@ -56,9 +56,9 @@ const persistToken = (token: string | null) => {
   }
 };
 
-// Create axios instances - they will use the correct baseURL when first used on the client
+// Create axios instances - baseURL will be set dynamically on first client request
+// Don't set baseURL here to avoid SSR issues
 export const api = axios.create({
-  baseURL: getApiUrl(),
   withCredentials: true,
   headers: {
     "Content-Type": "application/json",
@@ -70,7 +70,6 @@ export const api = axios.create({
 // A lightweight axios instance used to call refresh endpoints without triggering
 // the interceptors attached to `api` (avoids circular refresh attempts).
 const refreshClient = axios.create({
-  baseURL: getApiUrl(),
   withCredentials: true,
   // We will manually handle XSRF headers for this client
   // xsrfCookieName: "XSRF-TOKEN",
@@ -112,10 +111,15 @@ export function clearAccessToken() {
 }
 
 // --------------------
-// Request interceptor to attach Authorization header
+// Request interceptor to set baseURL dynamically and attach Authorization header
 // --------------------
 api.interceptors.request.use((config) => {
   try {
+    // Set baseURL dynamically on each request to ensure it's correct on client side
+    if (typeof window !== "undefined" && !config.baseURL) {
+      config.baseURL = getApiUrl();
+    }
+
     const url = (config.url ?? "").toString();
     const isAuthPath =
       url.includes("/api/v1/auth/refresh") || url.includes("/api/v1/auth/token");

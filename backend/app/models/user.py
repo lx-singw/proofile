@@ -6,7 +6,15 @@ from .base import Base, TimestampMixin
 import enum
 
 class UserRole(str, enum.Enum):
+    STUDENT = "student"
+    GRADUATE = "graduate"
     APPRENTICE = "apprentice"
+    PROFESSIONAL = "professional"
+    JOB_SEEKER = "job_seeker"
+    CAREER_CHANGER = "career_changer"
+    REMOTE_WORKER = "remote_worker"
+    FREELANCER = "freelancer"
+    RECRUITER = "recruiter"
     EMPLOYER = "employer"
     ADMIN = "admin"
 
