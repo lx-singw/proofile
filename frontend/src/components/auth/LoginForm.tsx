@@ -101,9 +101,9 @@ export default function LoginForm() {
         </Button>
       </div>
 
-      <div className="text-center text-sm text-gray-600">
+      <div className="text-center text-sm text-gray-600 dark:text-gray-400">
         Don't have an account?{" "}
-        <Link href="/register" className="font-medium text-blue-600 hover:text-blue-700">
+        <Link href="/register" className="font-medium text-green-600 hover:text-green-700 dark:text-green-500">
           Sign up
         </Link>
       </div>

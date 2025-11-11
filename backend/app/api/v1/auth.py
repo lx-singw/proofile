@@ -121,6 +121,9 @@ async def login_for_access_token(
         email = form_data.username.strip().lower()
         password = form_data.password
 
+        if config.settings.ENVIRONMENT != "production":
+            logger.debug("Login attempt email=%s password_len=%s", email, len(password or ""))
+
         # Get Redis connection
         redis = getattr(request.app.state, 'redis', None)
 

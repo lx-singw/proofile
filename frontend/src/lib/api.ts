@@ -1,26 +1,28 @@
 import axios, { AxiosHeaders, type AxiosRequestConfig } from "axios";
 
 // Prefer relative '/api' which is proxied to the backend via next.config rewrites in dev/E2E.
-// If NEXT_PUBLIC_API_URL is provided and not pointing to localhost (which breaks inside container browsers), use it.
+// This ensures cookies/CSRF tokens stay on the frontend origin and work through the proxy.
+// Only use NEXT_PUBLIC_API_URL in production when it's a different domain.
 const rawEnvUrl = process.env.NEXT_PUBLIC_API_URL;
-// Default to empty (relative '/api') so Next's rewrites/proxy can handle same-origin cookies.
-let API_URL = rawEnvUrl && !/localhost/i.test(rawEnvUrl) ? rawEnvUrl : "";
-if (typeof window !== "undefined" && rawEnvUrl) {
+
+let API_URL = "";  // Default to relative '/api' proxy
+
+if (typeof window !== "undefined" && rawEnvUrl && process.env.NODE_ENV === "production") {
   try {
-    // If the provided NEXT_PUBLIC_API_URL points to a different hostname than the
-    // current browser origin (e.g. 'http://backend:8000' while the page is on 'localhost:3000'),
-    // prefer relative paths so cookies (CSRF) are set on the frontend origin via the proxy.
+    // In production, if the provided NEXT_PUBLIC_API_URL points to a different hostname,
+    // use it directly (e.g., https://api.proofile.dev instead of /api proxy)
     const envHost = new URL(rawEnvUrl).hostname;
     if (envHost !== window.location.hostname) {
-      API_URL = "";
+      API_URL = rawEnvUrl;
     }
   } catch {
-    // ignore URL parse errors and keep the configured API_URL
+    // ignore URL parse errors; keep relative path default
   }
-  if (process.env.NODE_ENV !== "production") {
-    // Lightweight one-time debug log to help diagnose E2E issues
-    console.log("[api] baseURL resolved to", API_URL, "rawEnvUrl=", rawEnvUrl);
-  }
+}
+
+if (process.env.NODE_ENV !== "production") {
+  // Debug log for dev/test environments
+  console.log("[api] baseURL resolved to", API_URL || "/api (proxy)", "rawEnvUrl=", rawEnvUrl);
 }
 
 const ACCESS_TOKEN_STORAGE_KEY = "auth:accessToken";

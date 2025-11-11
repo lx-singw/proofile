@@ -109,7 +109,7 @@ const AuthState: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     } finally {
       queryClient.setQueryData(ME_QUERY_KEY, null);
       clearAccessToken();
-      router.push("/login");
+      router.push("/home");
     }
   };
 
@@ -147,98 +147,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }),
   );
 
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-
-    let cancelled = false;
-    const PERSIST_KEY = "rq-cache";
-    const PERSISTED_QUERY_KEY_PREFIXES: ReadonlyArray<ReadonlyArray<unknown>> = [["me"]];
-
-    const isKeyPrefixMatch = (key: readonly unknown[], prefix: readonly unknown[]) =>
-      prefix.every((value, index) => key[index] === value);
-
-    const shouldPersistQuery = (query: { queryKey: readonly unknown[]; state: { status: string } }) => {
-      if (query.state.status !== "success") return false;
-      return PERSISTED_QUERY_KEY_PREFIXES.some((prefix) => isKeyPrefixMatch(query.queryKey, prefix));
-    };
-
-    (async () => {
-      try {
-        const [{ persistQueryClient }, { createSyncStoragePersister }] = await Promise.all([
-          import("@tanstack/react-query-persist-client"),
-          import("@tanstack/query-sync-storage-persister"),
-        ]);
-        if (
-          cancelled ||
-          typeof persistQueryClient !== "function" ||
-          typeof createSyncStoragePersister !== "function"
-        ) {
-          return;
-        }
-
-        const safePersister = createSyncStoragePersister({
-          key: PERSIST_KEY,
-          storage: {
-            getItem: (key: string) => {
-              try {
-                return window.localStorage.getItem(key);
-              } catch {
-                return null;
-              }
-            },
-            setItem: (key: string, value: string) => {
-              try {
-                window.localStorage.setItem(key, value);
-              } catch {
-                // ignore quota/security errors
-              }
-            },
-            removeItem: (key: string) => {
-              try {
-                window.localStorage.removeItem(key);
-              } catch {
-                // ignore cleanup failures
-              }
-            },
-          },
-          serialize: (client: unknown) => {
-            try {
-              return JSON.stringify(client);
-            } catch {
-              return "";
-            }
-          },
-          deserialize: (cachedString: string) => {
-            try {
-              return JSON.parse(cachedString);
-            } catch {
-              try {
-                window.localStorage.removeItem(PERSIST_KEY);
-              } catch {
-                // ignore cleanup failures
-              }
-              return undefined;
-            }
-          },
-        });
-
-        persistQueryClient({
-          queryClient,
-          persister: safePersister,
-          dehydrateOptions: { shouldDehydrateQuery: shouldPersistQuery },
-          maxAge: 1000 * 60 * 60,
-        });
-      } catch (error) {
-        if (process.env.NODE_ENV !== "production") {
-          console.warn("[auth] failed to set up query persistence", error);
-        }
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [queryClient]);
+  // Persistence disabled temporarily - packages not in Docker container
+  // useEffect(() => {
+  //   if (typeof window === "undefined") return;
+  //   let cancelled = false;
+  //   // ... persistence code
+  //   return () => {
+  //     cancelled = true;
+  //   };
+  // }, [queryClient]);
 
   return (
     <QueryClientProvider client={queryClient}>
