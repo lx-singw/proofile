@@ -7,22 +7,22 @@ const rawEnvUrl = process.env.NEXT_PUBLIC_API_URL;
 
 let API_URL = "";  // Default to relative '/api' proxy
 
-if (typeof window !== "undefined" && rawEnvUrl && process.env.NODE_ENV === "production") {
+if (typeof window !== "undefined" && rawEnvUrl) {
   try {
-    // In production, if the provided NEXT_PUBLIC_API_URL points to a different hostname,
-    // use it directly (e.g., https://api.proofile.dev instead of /api proxy)
+    // Check if the provided URL points to a different hostname than current
     const envHost = new URL(rawEnvUrl).hostname;
-    if (envHost !== window.location.hostname) {
+    const currentHost = window.location.hostname;
+    // Only use absolute URL if it's a different domain
+    if (envHost !== currentHost && envHost !== "localhost" && envHost !== "127.0.0.1") {
       API_URL = rawEnvUrl;
+      console.log("[api] Using absolute URL:", API_URL);
+    } else {
+      console.log("[api] Using relative proxy /api (same-origin detected)");
     }
-  } catch {
+  } catch (e) {
     // ignore URL parse errors; keep relative path default
+    console.log("[api] Could not parse NEXT_PUBLIC_API_URL, using proxy /api");
   }
-}
-
-if (process.env.NODE_ENV !== "production") {
-  // Debug log for dev/test environments
-  console.log("[api] baseURL resolved to", API_URL || "/api (proxy)", "rawEnvUrl=", rawEnvUrl);
 }
 
 const ACCESS_TOKEN_STORAGE_KEY = "auth:accessToken";

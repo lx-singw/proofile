@@ -32,13 +32,16 @@ const AuthState: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const bootstrap = async () => {
       try {
         const existingToken = hydrateAccessTokenFromStorage();
+        // Only attempt refresh if we DON'T have a token in storage
+        // (meaning the browser might have a valid refresh token in cookies)
         if (!existingToken) {
           try {
             await authService.refresh();
           } catch (refreshErr) {
             if (process.env.NODE_ENV !== "production") {
-              console.warn("[auth] refresh failed during bootstrap", refreshErr);
+              console.log("[auth] No valid session, user is logged out");
             }
+            // This is expected when user is logged out - don't warn
             clearAccessToken();
           }
         }
