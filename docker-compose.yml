@@ -105,6 +105,30 @@ services:
     restart: unless-stopped
     command: npm run dev
 
+  worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: development
+    container_name: proofile-worker
+    env_file: .env
+    environment:
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - DATABASE_URL=postgresql+asyncpg://proofile_user:proofile_password@postgres:5432/proofile_dev
+    volumes:
+      - ./backend:/app
+      - backend_cache:/app/.cache
+    working_dir: /app
+    networks:
+      - proofile-network
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    command: celery -A app.celery_app.celery_app worker --loglevel=info
+
 networks:
   proofile-network:
     driver: bridge
