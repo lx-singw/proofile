@@ -19,7 +19,7 @@ def upgrade() -> None:
     op.create_table(
         'resumes',
         sa.Column('id', postgresql.UUID(as_uuid=True), primary_key=True, nullable=False),
-        sa.Column('user_id', postgresql.UUID(as_uuid=True), sa.ForeignKey('users.id'), nullable=False),
+        sa.Column('user_id', sa.Integer(), sa.ForeignKey('users.id'), nullable=False),
         sa.Column('name', sa.String(length=255), nullable=False),
         sa.Column('data', postgresql.JSONB, nullable=False, server_default=sa.text("'{}'::jsonb")),
         sa.Column('created_at', sa.DateTime(), nullable=False, server_default=sa.text('now()')),
