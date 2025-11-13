@@ -1,6 +1,6 @@
 """create resumes and resume_templates
 
-Revision ID: 20251113_create_resumes_and_templates
+Revision ID: 20251113_resumes
 Revises: 5e6bd3f5b3da
 Create Date: 2025-11-13 00:00:00.000000
 """
@@ -9,7 +9,7 @@ import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
-revision = '20251113_create_resumes_and_templates'
+revision = '20251113_resumes'
 down_revision = '5e6bd3f5b3da'
 branch_labels = None
 depends_on = None
