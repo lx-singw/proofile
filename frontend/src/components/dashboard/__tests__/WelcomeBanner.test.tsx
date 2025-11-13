@@ -52,10 +52,11 @@ describe("WelcomeBanner", () => {
       />
     );
 
-    const createButton = screen.getByRole("button", {
-      name: /Create Profile/i,
+    // Primary action is a link in the UI; match by link role and visible text
+    const createLink = screen.getByRole("link", {
+      name: /Create professional profile/i,
     });
-    expect(createButton).toBeInTheDocument();
+    expect(createLink).toBeInTheDocument();
   });
 
   it("renders view profile button", () => {
@@ -68,10 +69,10 @@ describe("WelcomeBanner", () => {
       />
     );
 
-    const viewButton = screen.getByRole("button", {
-      name: /View Profile/i,
+    const viewLink = screen.getByRole("link", {
+      name: /View profile/i,
     });
-    expect(viewButton).toBeInTheDocument();
+    expect(viewLink).toBeInTheDocument();
   });
 
   it("calls onCreateProfile when create profile button is clicked", () => {
@@ -85,11 +86,12 @@ describe("WelcomeBanner", () => {
       />
     );
 
-    const createButton = screen.getByRole("button", {
-      name: /Create Profile/i,
+    const createLink = screen.getByRole("link", {
+      name: /Create professional profile/i,
     });
-    fireEvent.click(createButton);
+    fireEvent.click(createLink);
 
+    // The component forwards clicks to the provided handler via Link.onClick
     expect(onCreateProfile).toHaveBeenCalledTimes(1);
   });
 
@@ -104,10 +106,10 @@ describe("WelcomeBanner", () => {
       />
     );
 
-    const viewButton = screen.getByRole("button", {
-      name: /View Profile/i,
+    const viewLink = screen.getByRole("link", {
+      name: /View profile/i,
     });
-    fireEvent.click(viewButton);
+    fireEvent.click(viewLink);
 
     expect(onViewProfile).toHaveBeenCalledTimes(1);
   });
@@ -152,10 +154,9 @@ describe("WelcomeBanner", () => {
       />
     );
 
+    // UI copy changed to focus on building a verified resume
     expect(
-      screen.getByText(
-        /Get started by creating your professional profile to stand out to employers/i
-      )
+      screen.getByText(/Create your verified resume in minutes and stand out to employers\./i)
     ).toBeInTheDocument();
   });
 });

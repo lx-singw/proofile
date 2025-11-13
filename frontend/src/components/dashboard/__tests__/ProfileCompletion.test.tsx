@@ -40,7 +40,7 @@ describe("ProfileCompletion", () => {
 
   it("displays section title", () => {
     render(<ProfileCompletion {...defaultProps} />);
-    expect(screen.getByText("Profile Completion")).toBeInTheDocument();
+    expect(screen.getByText("Resume Completion")).toBeInTheDocument();
   });
 
   it("displays completion percentage", () => {
@@ -140,7 +140,7 @@ describe("ProfileCompletion", () => {
         onStepClick={jest.fn()}
       />
     );
-    expect(screen.getByText("Profile Completion")).toBeInTheDocument();
+  expect(screen.getByText("Resume Completion")).toBeInTheDocument();
   });
 
   it("applies dark mode classes", () => {

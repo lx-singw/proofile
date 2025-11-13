@@ -82,7 +82,7 @@ export default function ActivityFeed({
       id: "act-2",
       type: "profile-view",
       actor: "John Tech Corp",
-      title: "Viewed your profile",
+      title: "Viewed your resume",
       description: "Senior Recruiter at Tech Corp",
       timestamp: new Date(Date.now() - 5 * 60 * 60 * 1000),
       href: "/profile/views",
@@ -93,7 +93,7 @@ export default function ActivityFeed({
       type: "skill-added",
       actor: "You",
       title: "Added new skill: TypeScript",
-      description: "Increased profile completeness by 5%",
+      description: "Increased resume completeness by 5%",
       timestamp: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000),
       href: "/profile/skills",
       read: true,
@@ -112,7 +112,7 @@ export default function ActivityFeed({
       id: "act-5",
       type: "profile-complete",
       actor: "You",
-      title: "Profile reached 85% completeness",
+      title: "Resume reached 85% completeness",
       description: "Great progress! Add a few more details",
       timestamp: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000),
       href: "/profile",
@@ -242,7 +242,7 @@ export default function ActivityFeed({
       {activities.length === 0 && (
         <div className="text-center py-8">
           <p className="text-gray-500 dark:text-gray-400 text-sm">
-            No recent activity. Start building your profile!
+            No recent activity. Start building your resume!
           </p>
         </div>
       )}

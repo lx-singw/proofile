@@ -13,7 +13,7 @@ export default function ProofileLogo({
 }: ProofileLogoProps) {
   return (
     <div className={`flex items-center gap-2 ${className}`}>
-      {/* Shield Icon */}
+      {/* Shield with Person Silhouette */}
       <svg
         width={size}
         height={size}
@@ -21,21 +21,23 @@ export default function ProofileLogo({
         fill="none"
         xmlns="http://www.w3.org/2000/svg"
       >
-        {/* Windows Security Shield Shape */}
+        {/* Shield outline */}
         <path
-          d="M50 5 L90 20 L90 45 Q90 75 50 95 Q10 75 10 45 L10 20 Z"
+          d="M50 10 L80 20 L80 50 Q80 70 50 90 Q20 70 20 50 L20 20 Z"
           fill="#10B981"
+          stroke="#059669"
+          strokeWidth="2"
           className="drop-shadow-lg"
         />
         
-        {/* Checkmark */}
+        {/* Person silhouette - head */}
+        <circle cx="50" cy="35" r="9" fill="white" opacity="0.95"/>
+        
+        {/* Person silhouette - body */}
         <path
-          d="M35 50 L45 60 L65 35"
-          stroke="white"
-          strokeWidth="8"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          fill="none"
+          d="M50 46 Q37 46 33 58 L33 66 L67 66 L67 58 Q63 46 50 46 Z"
+          fill="white"
+          opacity="0.95"
         />
       </svg>
 
@@ -69,17 +71,18 @@ export function ProofileLogoMono({
         fill="none"
         xmlns="http://www.w3.org/2000/svg"
       >
+        {/* Shield */}
         <path
-          d="M50 5 L90 20 L90 45 Q90 75 50 95 Q10 75 10 45 L10 20 Z"
+          d="M50 10 L80 20 L80 50 Q80 70 50 90 Q20 70 20 50 L20 20 Z"
           fill={color}
         />
+        {/* Person - head */}
+        <circle cx="50" cy="35" r="9" fill="white" opacity="0.95"/>
+        {/* Person - body */}
         <path
-          d="M35 50 L45 60 L65 35"
-          stroke="white"
-          strokeWidth="8"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          fill="none"
+          d="M50 46 Q37 46 33 58 L33 66 L67 66 L67 58 Q63 46 50 46 Z"
+          fill="white"
+          opacity="0.95"
         />
       </svg>
       {showWordmark && (

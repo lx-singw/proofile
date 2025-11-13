@@ -31,8 +31,11 @@ from app.models.user import User, UserRole
 from app.core.config import settings
 
 # Forcing the test DB name for postgres when running full integration tests
-POSTGRES_TEST_URL = config.settings.DATABASE_URL.replace("_dev", "_test")
-TEST_DB_NAME = urlparse(POSTGRES_TEST_URL).path.strip("/")
+try:
+    POSTGRES_TEST_URL = config.settings.DATABASE_URL.replace("_dev", "_test")
+    TEST_DB_NAME = urlparse(POSTGRES_TEST_URL).path.strip("/")
+except Exception as e:
+    raise RuntimeError(f"Failed to configure test database URL: {e}") from e
 
 
 @pytest_asyncio.fixture(scope="session")

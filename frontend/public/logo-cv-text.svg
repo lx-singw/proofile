@@ -1,0 +1,14 @@
+<svg width="200" height="200" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+  <!-- Shield outline -->
+  <path d="M100 20 L160 40 L160 100 Q160 140 100 180 Q40 140 40 100 L40 40 Z" 
+        fill="#3B82F6" stroke="#1E40AF" stroke-width="3"/>
+  
+  <!-- "CV" Text -->
+  <text x="100" y="115" font-family="Arial, sans-serif" font-size="60" 
+        font-weight="bold" fill="white" text-anchor="middle" opacity="0.95">CV</text>
+  
+  <!-- Checkmark accent -->
+  <path d="M130 70 L140 80 L160 60" 
+        stroke="#10B981" stroke-width="5" stroke-linecap="round" 
+        stroke-linejoin="round" fill="none"/>
+</svg>

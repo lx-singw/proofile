@@ -16,44 +16,60 @@ const nextConfig: NextConfig = {
 
   // Performance headers
   async headers() {
+    try {
+      return [
+        {
+          source: "/(.*)",
+          headers: [
+            {
+              key: "Cache-Control",
+              value: "public, max-age=31536000, immutable",
+            },
+          ],
+          has: [
+            {
+              type: "query",
+              key: "v",
+            },
+          ],
+        },
+      ];
+    } catch {
+      return [];
+    }
+  },
+
+
+  // Enable API proxy rewrites for development
+  async rewrites() {
     return [
       {
-        source: "/(.*)",
-        headers: [
-          {
-            key: "Cache-Control",
-            value: "public, max-age=31536000, immutable",
-          },
-        ],
-        // Only for static assets
-        has: [
-          {
-            type: "query",
-            key: "v",
-          },
-        ],
+        // This rule intercepts any request starting with /api/ on the frontend
+        // and proxies it to the backend while preserving the /api prefix so
+        // backend routes like /api/v1/* continue to work unchanged.
+        // e.g., /api/v1/users -> http://backend:8000/api/v1/users
+        source: "/api/:path*",
+        destination: `${process.env.BACKEND_INTERNAL_URL || "http://backend:8000"}/api/:path*`,
       },
     ];
   },
 
-  // Experimental optimizations
   experimental: {
     optimizePackageImports: ["lucide-react", "framer-motion"],
   },
 
-  // Webpack configuration for bundle analysis
+  // Webpack configuration for bundle optimization
   webpack: (config, { isServer }) => {
-    // Only in production and for client bundle
-    if (!isServer && process.env.NODE_ENV === "production") {
+    const isProduction = process.env.NODE_ENV === "production";
+    const isClientBundle = !isServer;
+    
+    if (isClientBundle && isProduction) {
       config.mode = "production";
-      
-      // Optimize chunk splitting
       config.optimization = {
         ...config.optimization,
         splitChunks: {
           chunks: "all",
           cacheGroups: {
-            // Vendor libraries
             vendors: {
               test: /[\\/]node_modules[\\/]/,
               name: "vendors",
@@ -61,7 +77,6 @@ const nextConfig: NextConfig = {
               reuseExistingChunk: true,
               enforce: true,
             },
-            // React and core dependencies
             react: {
               test: /[\\/]node_modules[\\/](react|react-dom)[\\/]/,
               name: "react-vendors",
@@ -69,7 +84,6 @@ const nextConfig: NextConfig = {
               reuseExistingChunk: true,
               enforce: true,
             },
-            // Query and state management
             query: {
               test: /[\\/]node_modules[\\/](@tanstack[\\/]react-query)[\\/]/,
               name: "query-vendors",
@@ -82,17 +96,6 @@ const nextConfig: NextConfig = {
       };
     }
     return config;
-  },
-
-  async rewrites() {
-    // Proxy API calls in dev and e2e to the backend service inside Docker
-    const backendUrl = process.env.BACKEND_INTERNAL_URL || "http://backend:8000";
-    return [
-      {
-        source: "/api/:path*",
-        destination: `${backendUrl}/api/:path*`,
-      },
-    ];
   },
 };
 

@@ -1,6 +1,7 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import ValidationError
 import logging
+import os
 
 logger = logging.getLogger(__name__)
 
@@ -51,14 +52,21 @@ class Settings(BaseSettings):
 
 try:
     settings = Settings()
-    # In non-production environments, disable CSRF for programmatic API testing (E2E, integration tests)
-    # This allows E2E tests and API clients to work without manually handling CSRF tokens
-    if settings.ENVIRONMENT in ("test", "development"):
-        settings.CSRF_ENABLED = False
-    else:
-        # In production, CSRF must be enabled
-        settings.CSRF_ENABLED = True
-    
+
+    # Align runtime environment with current ENVIRONMENT variable (tests set this dynamically).
+    runtime_env = os.getenv("ENVIRONMENT")
+    if runtime_env:
+        settings.ENVIRONMENT = runtime_env
+
+    # Pytest sets PYTEST_CURRENT_TEST; treat that as test environment for defensive checks.
+    if "PYTEST_CURRENT_TEST" in os.environ:
+        settings.ENVIRONMENT = "test"
+
+    # Only override CSRF if not explicitly provided via env/config.
+    csrf_user_override = "CSRF_ENABLED" in settings.model_fields_set or os.getenv("CSRF_ENABLED") is not None
+    if not csrf_user_override:
+        settings.CSRF_ENABLED = settings.ENVIRONMENT != "development"
+
     if settings.ENVIRONMENT == "production" and settings.SECRET_KEY == "your-secret-key-change-in-production":
         raise ValueError("SECRET_KEY must be changed in production environment")
     logger.info("Configuration loaded successfully")

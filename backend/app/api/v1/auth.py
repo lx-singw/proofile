@@ -1,4 +1,5 @@
 import logging
+import os
 import secrets
 from datetime import datetime, timedelta, timezone
 
@@ -21,7 +22,7 @@ def _validate_csrf(request: Request) -> None:
     Validate CSRF token if enabled.
     In test environment, CSRF validation is disabled for programmatic API testing.
     """
-    if not config.settings.CSRF_ENABLED:
+    if not config.settings.CSRF_ENABLED and "PYTEST_CURRENT_TEST" not in os.environ:
         # CSRF validation disabled in test environment
         return
     
@@ -170,12 +171,17 @@ async def login_for_access_token(
 
 
 @router.post("/refresh")
-async def refresh_access_token(request: Request, response: Response):
+async def refresh_access_token(
+    request: Request, response: Response, db: AsyncSession = Depends(deps.get_db)
+):
     """
     Hybrid refresh endpoint: expects a HttpOnly refresh cookie and a readable CSRF cookie/header.
     - Validates XSRF header matches cookie value (unless disabled in test environment).
     - Decodes refresh token cookie and issues a fresh access token (JSON).
     """
+    from app.models.user import User
+    from sqlalchemy.future import select
+
     try:
         _validate_csrf(request)
 
@@ -187,6 +193,17 @@ async def refresh_access_token(request: Request, response: Response):
             payload = security.decode_refresh_token(refresh_token)
         except Exception as e:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token") from e
+
+        user_id = payload.get("jti")
+        if not user_id:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token payload")
+
+        # Verify user exists and is active
+        result = await db.execute(select(User).where(User.id == int(user_id)))
+        user = result.scalars().first()
+
+        if not user or not user.is_active:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found or inactive")
 
         # Build new access token
         try:
@@ -265,7 +282,14 @@ async def get_authenticated_user(current_user=Depends(deps.get_current_active_us
 
     Frontend will attempt /api/v1/auth/me as a fallback; exposing this makes probing cheaper.
     """
-    return current_user
+    return {
+        "id": current_user.id,
+        "email": current_user.email,
+        "full_name": current_user.full_name,
+        "role": current_user.role,
+        "is_active": current_user.is_active,
+        "created_at": None,
+    }
 
 
 @router.patch("/me", response_model=schemas.UserRead)
@@ -282,7 +306,7 @@ async def update_user_settings(
     from app.models.user import User
     
     # Verify current password
-    if not security.pwd_context.verify(payload.current_password, current_user.hashed_password):
+    if not security.verify_password(payload.current_password, current_user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Current password is incorrect",
@@ -305,7 +329,13 @@ async def update_user_settings(
         current_user.full_name = payload.full_name
     
     if payload.new_password:
-        current_user.hashed_password = security.pwd_context.hash(payload.new_password)
+        try:
+            current_user.hashed_password = security.get_password_hash(payload.new_password)
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=str(exc),
+            ) from exc
     
     db.add(current_user)
     await db.commit()

@@ -55,11 +55,12 @@ const authenticateForApi = async (email: string, password: string) => {
   const maxAttempts = 4;
 
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    const body = new URLSearchParams();
+    body.append('username', email);
+    body.append('password', password);
     const loginResp = await apiContext.post('/api/v1/auth/token', {
-      form: {
-        username: email,
-        password,
-      },
+      data: body.toString(),
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       failOnStatusCode: false,
     });
 
@@ -138,7 +139,7 @@ const registerUserViaUi = async (
   }: { email: string; password: string; fullName?: string }
 ) => {
   await gotoWithRetry(page, '/register');
-  await expect(page.getByRole('heading', { name: /create account/i })).toBeVisible({ timeout: 20000 });
+  await expect(page.getByRole('heading', { name: /create.*account/i })).toBeVisible({ timeout: 20000 });
   await page.getByLabel(/^email$/i).fill(email);
   const fullNameInput = page.getByLabel(/full name/i);
   if ((await fullNameInput.count()) > 0) {
@@ -154,7 +155,7 @@ const registerUserViaUi = async (
         response.status() >= 200 &&
         response.status() < 400
     ),
-    page.getByRole('button', { name: /create account/i }).click(),
+    page.getByRole('button', { name: /create.*account/i }).click(),
   ]);
   expect(resp.status()).toBeGreaterThanOrEqual(200);
   expect(resp.status()).toBeLessThan(400);
@@ -185,7 +186,7 @@ const loginUserViaUi = async (page: any, { email, password }: { email: string; p
   const cookieSnapshot = await page.evaluate(() => document.cookie);
   // eslint-disable-next-line no-console
   console.log('[loginUserViaUi] cookies:', cookieSnapshot);
-  await expect(page.getByTestId('profile-status-banner')).toBeVisible({ timeout: NAVIGATION_TIMEOUT });
+  await expect(page.getByTestId('profile-status-card')).toBeVisible({ timeout: NAVIGATION_TIMEOUT });
 };
 
 const createProfileViaUi = async (
@@ -316,7 +317,7 @@ test.describe('Profile Flow', () => {
     await loginViaApi(page, email, password);
     await gotoWithRetry(page, '/dashboard');
     await expect(page).toHaveURL(/\/dashboard(?:\/?|$)/, { timeout: NAVIGATION_TIMEOUT });
-    await expect(page.getByTestId('profile-status-banner')).toBeVisible({ timeout: NAVIGATION_TIMEOUT });
+    await expect(page.getByTestId('profile-status-card')).toBeVisible({ timeout: NAVIGATION_TIMEOUT });
     await Promise.all([
       page.waitForURL(/\/profile\/create(?:\/?|$)/, { timeout: NAVIGATION_TIMEOUT }),
       page.getByRole('link', { name: /create professional profile/i }).click(),

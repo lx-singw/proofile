@@ -25,7 +25,16 @@ class User(Base, TimestampMixin):
     email = Column(String, unique=True, index=True, nullable=False)
     hashed_password = Column(String, nullable=False)
     full_name = Column(String, index=True)
-    role = Column(SQLAlchemyEnum(UserRole), nullable=False, default=UserRole.APPRENTICE)
+    role = Column(
+        SQLAlchemyEnum(
+            UserRole,
+            name="userrole",
+            values_callable=lambda enum_cls: [member.value for member in enum_cls],
+            validate_strings=True,
+        ),
+        nullable=False,
+        default=UserRole.APPRENTICE,
+    )
     is_active = Column(Boolean, default=True)
 
     # Relationship to Profile
@@ -33,6 +42,8 @@ class User(Base, TimestampMixin):
 
     # Relationship to Jobs
     jobs: Mapped[list["Job"]] = relationship("Job", back_populates="employer", cascade="all, delete-orphan")
+    # Relationship to Resumes
+    resumes: Mapped[list["Resume"]] = relationship("Resume", back_populates="user", cascade="all, delete-orphan")
 
 
 # Track latest status changes (id, updated_at, is_active) keyed by email
@@ -41,17 +52,29 @@ USER_STATUS_CACHE: Dict[str, Tuple[int, datetime, bool]] = {}
 
 @event.listens_for(User, "after_insert")
 def _user_after_insert(mapper, connection, target: User) -> None:
-    USER_STATUS_CACHE[target.email.lower()] = (
-        target.id,
-        target.updated_at or datetime.utcnow(),
-        target.is_active,
-    )
+    try:
+        if target.email:
+            USER_STATUS_CACHE[target.email.lower()] = (
+                target.id,
+                target.updated_at or datetime.utcnow(),
+                target.is_active,
+            )
+    except (AttributeError, TypeError) as e:
+        # Log but don't fail the transaction if cache update fails
+        import logging
+        logging.getLogger(__name__).warning(f"Failed to update user status cache on insert: {e}")
 
 
 @event.listens_for(User, "after_update")
 def _user_after_update(mapper, connection, target: User) -> None:
-    USER_STATUS_CACHE[target.email.lower()] = (
-        target.id,
-        target.updated_at or datetime.utcnow(),
-        target.is_active,
-    )
+    try:
+        if target.email:
+            USER_STATUS_CACHE[target.email.lower()] = (
+                target.id,
+                target.updated_at or datetime.utcnow(),
+                target.is_active,
+            )
+    except (AttributeError, TypeError) as e:
+        # Log but don't fail the transaction if cache update fails
+        import logging
+        logging.getLogger(__name__).warning(f"Failed to update user status cache on update: {e}")

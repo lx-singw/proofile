@@ -13,6 +13,8 @@ COPY package*.json ./
 
 # Install dependencies and Snyk CLI
 RUN npm ci && npm install -g snyk
+# Ensure npm is up-to-date (fixes "new npm version available" notices during build)
+RUN npm install -g npm@latest
 
 # Copy application code
 COPY . .
@@ -36,6 +38,8 @@ WORKDIR /app
 
 COPY package*.json ./
 RUN npm ci --only=production
+# Update npm in the deps image so subsequent stages use the newer npm
+RUN npm install -g npm@latest
 
 # Builder stage
 FROM mcr.microsoft.com/playwright:v1.56.1-jammy AS builder
@@ -44,6 +48,8 @@ WORKDIR /app
 
 COPY package*.json ./
 RUN npm ci && npm install -g snyk
+# Update npm in the builder stage as well (matches development stage)
+RUN npm install -g npm@latest
 
 COPY . .
 RUN npm run build
