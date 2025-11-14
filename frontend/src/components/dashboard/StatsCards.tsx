@@ -37,7 +37,7 @@ export default function StatsCards({
   const stats: StatCard[] = [
     {
       icon: <Eye className="w-6 h-6" />,
-      label: "Profile Views",
+      label: "Resume Views",
       value: profileViews,
       change: 12,
       trend: "up",
@@ -51,7 +51,7 @@ export default function StatsCards({
     },
     {
       icon: <Award className="w-6 h-6" />,
-      label: "Verifications",
+      label: "Verified Items",
       value: verifications,
       change: 0,
       trend: "neutral",

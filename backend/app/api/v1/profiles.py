@@ -30,7 +30,7 @@ async def list_profiles(
     skip: int = 0,
     limit: int = 10,
     db: AsyncSession = Depends(deps.get_db),
-    current_user: User = Depends(deps.get_current_user)
+    current_user = Depends(deps.get_current_active_user)
 ):
     """
     List profiles with pagination.
@@ -58,25 +58,32 @@ async def list_profiles(
 @router.get("/me", response_model=ProfileRead)
 async def get_my_profile(
     db: AsyncSession = Depends(deps.get_db),
-    current_user: User = Depends(deps.get_current_active_user)
+    current_user = Depends(deps.get_current_active_user)
 ):
     """
     Get the profile of the current authenticated user.
     """
-    profile = await profile_service.get_profile_by_user_id(db, user_id=current_user.id)
-    if profile is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Profile not found for the current user."
-        )
-    return profile
+    try:
+        profile = await profile_service.get_profile_by_user_id(db, user_id=current_user.id)
+        if profile is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Profile not found for the current user."
+            )
+        return profile
+    except HTTPException:
+        raise
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).exception("Error in get_my_profile: %s", e)
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/{profile_id}", response_model=ProfileRead)
 async def get_profile(
     profile_id: int,
     db: AsyncSession = Depends(deps.get_db),
-    current_user: User = Depends(deps.get_current_active_user)
+    current_user = Depends(deps.get_current_active_user)
 ):
     """
     Get a specific profile by its ID.
@@ -130,7 +137,7 @@ async def get_profile(
 async def create_profile(
     profile_data: ProfileCreate,
     db: AsyncSession = Depends(deps.get_db),
-    current_user: User = Depends(deps.get_current_active_user)
+    current_user = Depends(deps.get_current_active_user)
 ):
     """
     Create a new profile for the current authenticated user.
@@ -163,7 +170,7 @@ async def update_profile(
     profile_id: int,
     profile_update: ProfileUpdate,
     db: AsyncSession = Depends(deps.get_db),
-    current_user: User = Depends(deps.get_current_active_user)
+    current_user = Depends(deps.get_current_active_user)
 ):
     """
     Update a profile's information.
@@ -208,7 +215,7 @@ async def update_profile(
 async def upload_avatar(
     file: UploadFile = File(...),
     db: AsyncSession = Depends(deps.get_db),
-    current_user: User = Depends(deps.get_current_active_user)
+    current_user = Depends(deps.get_current_active_user)
 ):
     """Upload a profile avatar."""
     # Get user's profile first
@@ -275,7 +282,7 @@ async def upload_avatar(
 async def delete_profile(
     profile_id: int,
     db: AsyncSession = Depends(deps.get_db),
-    current_user: User = Depends(deps.get_current_active_user)
+    current_user = Depends(deps.get_current_active_user)
 ):
     """
     Delete a profile.

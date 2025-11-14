@@ -22,7 +22,12 @@ describe("MobileDrawer", () => {
       <MobileDrawer isOpen={true} onClose={jest.fn()} user={mockUser} />
     );
 
-    expect(screen.getByRole("navigation")).toBeInTheDocument();
+    // Use container querySelector to avoid matching nested <nav> elements
+    const { container } = render(
+      <MobileDrawer isOpen={true} onClose={jest.fn()} user={mockUser} />
+    );
+
+    expect(container.querySelector('[role="navigation"]')).toBeInTheDocument();
   });
 
   it("displays user information", () => {
@@ -137,11 +142,12 @@ describe("MobileDrawer", () => {
   });
 
   it("handles missing user gracefully", () => {
-    render(
+    const { container } = render(
       <MobileDrawer isOpen={true} onClose={jest.fn()} />
     );
 
-    expect(screen.getByRole("navigation")).toBeInTheDocument();
+    // Ensure the drawer renders but no user email is displayed
+    expect(container.querySelector('[role="navigation"]')).toBeInTheDocument();
     expect(screen.queryByText("user@example.com")).not.toBeInTheDocument();
   });
 });

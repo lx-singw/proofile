@@ -1,0 +1,10 @@
+<svg width="200" height="200" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+  <!-- Shield outline -->
+  <path d="M100 20 L160 40 L160 100 Q160 140 100 180 Q40 140 40 100 L40 40 Z" 
+        fill="#10B981" stroke="#059669" stroke-width="4"/>
+  
+  <!-- Person silhouette -->
+  <circle cx="100" cy="70" r="18" fill="white" opacity="0.95"/>
+  <path d="M100 92 Q74 92 66 116 L66 132 L134 132 L134 116 Q126 92 100 92 Z" 
+        fill="white" opacity="0.95"/>
+</svg>

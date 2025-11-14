@@ -147,6 +147,7 @@ app.add_middleware(
         "Accept",
         "Origin",
         "X-Requested-With",
+        "X-XSRF-TOKEN",
     ],
     expose_headers=["*"],
     max_age=86400,

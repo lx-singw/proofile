@@ -5,6 +5,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from redis.asyncio import Redis
 from typing import Tuple, Dict
 import time
+import uuid
 import logging
 from app.core import config
 
@@ -54,10 +55,20 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             clear_before = current_time - window
             
             # Remove old entries (outside current window)
-            await self.redis.zremrangebyscore(key, 0, clear_before)
+            try:
+                await self.redis.zremrangebyscore(key, 0, clear_before)
+            except Exception as redis_err:
+                logger.warning(f"Failed to remove old rate limit entries: {redis_err}")
+                # Continue - this is not critical
             
-            # Add current request
-            await self.redis.zadd(key, {str(current_time): current_time})
+            # Add current request. Use a unique member (uuid) so multiple
+            # requests within the same second are counted separately.
+            unique_member = str(uuid.uuid4())
+            try:
+                await self.redis.zadd(key, {unique_member: current_time})
+            except Exception as redis_err:
+                logger.error(f"Failed to add rate limit entry: {redis_err}")
+                return False, 0  # Fail open on Redis write error
             
             # Get current count
             request_count = await self.redis.zcard(key)

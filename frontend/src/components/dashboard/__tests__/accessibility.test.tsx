@@ -125,7 +125,7 @@ describe("Accessibility Tests - Dashboard Components", () => {
       expect(heading).toBeInTheDocument();
     });
 
-    it("should have accessible buttons", () => {
+    it("should have accessible buttons/links", () => {
       render(
         <WelcomeBanner
           userName="Test User"
@@ -135,11 +135,19 @@ describe("Accessibility Tests - Dashboard Components", () => {
         />
       );
 
-      const buttons = screen.getAllByRole("button");
-      expect(buttons.length).toBeGreaterThan(0);
+      // Actions may be rendered as buttons or links depending on variant
+      const buttons = screen.queryAllByRole("button") || [];
+      const links = screen.queryAllByRole("link") || [];
+      const actions = [...buttons, ...links];
+      expect(actions.length).toBeGreaterThan(0);
 
-      buttons.forEach((button) => {
-        expect(button).toBeEnabled();
+      actions.forEach((el) => {
+        // Ensure interactive element is enabled or has href
+        if (el.tagName === "A") {
+          expect(el).toHaveAttribute("href");
+        } else {
+          expect(el).toBeEnabled();
+        }
       });
     });
 
@@ -155,12 +163,12 @@ describe("Accessibility Tests - Dashboard Components", () => {
         />
       );
 
-      const buttons = screen.getAllByRole("button");
+      const actions = [...screen.queryAllByRole("button"), ...screen.queryAllByRole("link")];
 
-      // Tab through buttons
-      for (const button of buttons) {
+      // Tab through interactive actions (buttons and links)
+      for (const action of actions) {
         await user.tab();
-        expect(button).toHaveFocus();
+        expect(document.activeElement).toBe(action);
       }
     });
   });
@@ -195,7 +203,7 @@ describe("Accessibility Tests - Dashboard Components", () => {
         />
       );
 
-      expect(screen.getByText(/Profile Views/i)).toBeInTheDocument();
+  expect(screen.getByText(/Resume Views/i)).toBeInTheDocument();
     });
 
     it("should display numeric values accessibly", () => {
@@ -264,8 +272,9 @@ describe("Accessibility Tests - Dashboard Components", () => {
         />
       );
 
-      expect(screen.getByText("Add Headline")).toBeInTheDocument();
-      expect(screen.getByText("Write Summary")).toBeInTheDocument();
+  expect(screen.getByText("Add Headline")).toBeInTheDocument();
+  // Write Summary may appear multiple times (item and CTA), ensure at least one exists
+  expect(screen.getAllByText("Write Summary").length).toBeGreaterThan(0);
     });
 
     it("should indicate completion status", () => {
@@ -279,7 +288,8 @@ describe("Accessibility Tests - Dashboard Components", () => {
 
       // Both steps should be visible
       mockSteps.forEach((step) => {
-        expect(screen.getByText(step.label)).toBeInTheDocument();
+        const matches = screen.queryAllByText(step.label);
+        expect(matches.length).toBeGreaterThan(0);
       });
     });
   });

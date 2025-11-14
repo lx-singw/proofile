@@ -77,7 +77,7 @@ export default function ProfileCompletion({
       <div className="mb-6">
         <div className="flex items-center justify-between mb-2">
           <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-            Profile Completion
+            Resume Completion
           </h3>
           <span className="text-2xl font-bold text-blue-600 dark:text-blue-400">
             {completionPercentage}%
@@ -142,7 +142,7 @@ export default function ProfileCompletion({
       {nextStep && (
         <div className="pt-4 border-t border-gray-200 dark:border-gray-700">
           <p className="text-xs text-gray-600 dark:text-gray-400 mb-2">
-            Next step to improve your profile:
+            Next step to improve your resume:
           </p>
           <a
             href={nextStep.href}

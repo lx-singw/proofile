@@ -14,7 +14,7 @@ interface DashboardDropdownProps {
   items: DashboardDropdownItem[];
   align?: "left" | "right";
   className?: string;
-  onItemClick?: (item: DashboardDropdownItem) => void;
+  onItemClick?: (item: DashboardDropdownItem, event?: React.MouseEvent) => void;
 }
 
 /**
@@ -144,9 +144,11 @@ export default function DashboardDropdown({
                   } transition-colors flex items-center gap-2`}
                   role="menuitem"
                   onMouseEnter={() => setHighlightedIndex(index)}
-                  onClick={() => {
-                    onItemClick?.(item);
-                    setIsOpen(false);
+                  onClick={(e) => {
+                    onItemClick?.(item, e);
+                    if (!e.defaultPrevented) {
+                      setIsOpen(false);
+                    }
                   }}
                 >
                   {item.icon && <span className="w-4 h-4">{item.icon}</span>}

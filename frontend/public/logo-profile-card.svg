@@ -1,0 +1,23 @@
+<svg width="200" height="200" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+  <!-- Shield outline -->
+  <path d="M100 20 L160 40 L160 100 Q160 140 100 180 Q40 140 40 100 L40 40 Z" 
+        fill="#3B82F6" stroke="#1E40AF" stroke-width="3"/>
+  
+  <!-- Profile card background -->
+  <rect x="65" y="60" width="70" height="85" rx="4" fill="white" opacity="0.95"/>
+  
+  <!-- Person icon on card -->
+  <circle cx="100" cy="85" r="12" fill="#3B82F6"/>
+  <path d="M100 98 Q88 98 85 108 L85 115 L115 115 L115 108 Q112 98 100 98 Z" 
+        fill="#3B82F6"/>
+  
+  <!-- Info lines on card -->
+  <line x1="75" y1="125" x2="125" y2="125" stroke="#94A3B8" stroke-width="2" stroke-linecap="round"/>
+  <line x1="75" y1="132" x2="120" y2="132" stroke="#94A3B8" stroke-width="2" stroke-linecap="round"/>
+  
+  <!-- Verification badge -->
+  <circle cx="120" cy="135" r="10" fill="#10B981"/>
+  <path d="M116 135 L119 138 L124 133" 
+        stroke="white" stroke-width="2" stroke-linecap="round" 
+        stroke-linejoin="round" fill="none"/>
+</svg>

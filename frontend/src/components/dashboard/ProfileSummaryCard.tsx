@@ -52,11 +52,11 @@ export default function ProfileSummaryCard({
         </p>
       </div>
 
-      {/* Profile Completion */}
+      {/* Resume Completion */}
       <div className="mb-4">
         <div className="flex items-center justify-between mb-2">
           <span className="text-xs font-medium text-gray-700 dark:text-gray-300">
-            Profile Complete
+            Resume Complete
           </span>
           <span className="text-xs font-semibold text-blue-600 dark:text-blue-400">
             {completionPercentage}%
@@ -89,18 +89,18 @@ export default function ProfileSummaryCard({
           className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 dark:hover:bg-blue-500 transition-colors text-sm font-medium"
         >
           <Edit2 className="w-4 h-4" />
-          Edit Profile
+          Edit Resume
         </Link>
         <button className="w-full flex items-center justify-center gap-2 px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-md hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors text-sm font-medium">
           <Share2 className="w-4 h-4" />
-          Share
+          Share Resume
         </button>
         <Link
           href="/profile"
           className="w-full flex items-center justify-center gap-2 px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-md hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors text-sm font-medium"
         >
           <FileText className="w-4 h-4" />
-          View Profile
+          View Resume
         </Link>
       </div>
     </div>
