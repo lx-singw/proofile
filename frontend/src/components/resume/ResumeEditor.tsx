@@ -4,6 +4,7 @@ import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { createResume, getResume, saveResume } from "@/lib/resumeApi";
+import useWorkerEvents from "@/hooks/useWorkerEvents";
 
 const ResumeSchema = z.object({
   name: z.string().min(1),
@@ -14,6 +15,41 @@ export default function ResumeEditor({ resumeId }: { resumeId?: string }) {
   const { control, handleSubmit, reset } = useForm({ resolver: zodResolver(ResumeSchema), defaultValues: { name: "My Resume", data: {} } });
   const [id, setId] = useState<string | undefined>(resumeId);
   const [saving, setSaving] = useState(false);
+  const [userId, setUserId] = useState<string | number | undefined>(undefined);
+
+  const { lastEvent } = useWorkerEvents(userId);
+
+  useEffect(() => {
+    // attempt to fetch current user id for websocket binding; fail silently
+    (async () => {
+      try {
+        const res = await fetch((process.env.NEXT_PUBLIC_API_URL || "") + "/api/v1/users/me", { credentials: "include" });
+        if (res.ok) {
+          const body = await res.json();
+          setUserId(body.id);
+        }
+      } catch (e) {
+        // ignore
+      }
+    })();
+  }, []);
+
+  useEffect(() => {
+    if (!lastEvent) return;
+    // If the event matches the current resume, update the form or trigger download
+    if (lastEvent.event === "RESUME_PARSED_SUCCESS" && lastEvent.resume_id === id) {
+      if (lastEvent.data) reset({ name: (lastEvent.data.name || "My Resume"), data: lastEvent.data });
+    }
+    if (lastEvent.event === "PDF_READY" && lastEvent.resume_id === id && lastEvent.download_url) {
+      // trigger automatic download
+      const a = document.createElement("a");
+      a.href = lastEvent.download_url;
+      a.download = "resume.pdf";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    }
+  }, [lastEvent, id, reset]);
 
   useEffect(() => {
     if (id) {

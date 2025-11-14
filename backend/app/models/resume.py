@@ -14,5 +14,6 @@ class Resume(Base, TimestampMixin):
     data = Column(JSONB, nullable=False, server_default='{}')
 
     # relationships
-    user = relationship("User", back_populates="resumes")
+    # Use fully-qualified target to avoid import/mapper ordering issues
+    user = relationship("app.models.user.User", back_populates="resumes")
 

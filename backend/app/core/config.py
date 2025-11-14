@@ -49,6 +49,8 @@ class Settings(BaseSettings):
     # CSRF settings: disable in test/development environment for easier testing
     # In production, always enable CSRF. In development/test, can disable for testing convenience.
     CSRF_ENABLED: bool = True
+    # Allow enabling test-only routes (disabled by default)
+    ENABLE_TEST_ROUTES: bool = False
 
 try:
     settings = Settings()

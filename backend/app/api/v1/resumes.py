@@ -60,4 +60,3 @@ async def upload_resume(file: UploadFile = File(...), background_tasks: Backgrou
 async def generate_pdf(resume_id: UUID, payload: dict, background_tasks: BackgroundTasks = None, db: AsyncSession = Depends(get_db), current_user = Depends(get_current_active_user)):
     # In production: enqueue generate_pdf_task.delay(resume_id, payload.get('template_id'))
     return {"task_id": "stub", "status": "Your PDF is being generated. It will download automatically."}
-*** End Patch

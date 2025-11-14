@@ -43,7 +43,8 @@ class User(Base, TimestampMixin):
     # Relationship to Jobs
     jobs: Mapped[list["Job"]] = relationship("Job", back_populates="employer", cascade="all, delete-orphan")
     # Relationship to Resumes
-    resumes: Mapped[list["Resume"]] = relationship("Resume", back_populates="user", cascade="all, delete-orphan")
+    # Use fully-qualified target to avoid import/mapper ordering issues
+    resumes: Mapped[list["app.models.resume.Resume"]] = relationship("app.models.resume.Resume", back_populates="user", cascade="all, delete-orphan")
 
 
 # Track latest status changes (id, updated_at, is_active) keyed by email
@@ -78,3 +79,11 @@ def _user_after_update(mapper, connection, target: User) -> None:
         # Log but don't fail the transaction if cache update fails
         import logging
         logging.getLogger(__name__).warning(f"Failed to update user status cache on update: {e}")
+
+
+# Ensure related models are imported so SQLAlchemy can locate them when
+# configuring mappers in different import orders (prevents mapper lookup errors).
+try:
+    import app.models.resume  # noqa: F401
+except Exception:
+    pass

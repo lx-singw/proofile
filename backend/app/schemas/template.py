@@ -1,5 +1,6 @@
 from __future__ import annotations
 from pydantic import BaseModel
+from pydantic import ConfigDict
 from uuid import UUID
 from datetime import datetime
 from typing import Optional
@@ -11,5 +12,4 @@ class ResumeTemplateRead(BaseModel):
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
