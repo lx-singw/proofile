@@ -23,7 +23,19 @@ export const registrationSchema = z.object({
     .regex(/(?=.*[a-z])/, "Include a lowercase letter")
     .regex(/(?=.*[A-Z])/, "Include an uppercase letter")
     .regex(/(?=.*\d)/, "Include a number")
-    .regex(/(?=.*[!@#$%^&*(),.?":{}|<>_+-])/, "Include a special character"),
+    .regex(/(?=.*[!@#$%^&*(),.?":{}|<>_+-])/, "Include a special character")
+    .refine((value) => new TextEncoder().encode(value).length <= 72, {
+      message: "Password must be 72 bytes or fewer. Use fewer or simpler characters.",
+    })
+    .superRefine((value, ctx) => {
+      const byteLength = new TextEncoder().encode(value).length;
+      if (byteLength > 72) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Password must be 72 bytes or fewer. Use fewer or simpler characters.",
+        });
+      }
+    }),
 });
 
 type FormValues = z.infer<typeof registrationSchema>;
@@ -83,6 +95,14 @@ export default function RegistrationForm() {
         setError("email", {
           type: "server",
           message: "Email already in use. Log in instead.",
+        });
+        return;
+      }
+
+      if (detail?.toLowerCase().includes("72") || detail?.toLowerCase().includes("truncate")) {
+        setError("password", {
+          type: "server",
+          message: detail,
         });
         return;
       }

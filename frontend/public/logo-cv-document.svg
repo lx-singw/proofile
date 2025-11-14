@@ -1,0 +1,21 @@
+<svg width="200" height="200" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+  <!-- Shield outline -->
+  <path d="M100 20 L160 40 L160 100 Q160 140 100 180 Q40 140 40 100 L40 40 Z" 
+        fill="#3B82F6" stroke="#1E40AF" stroke-width="3"/>
+  
+  <!-- CV Document -->
+  <rect x="75" y="65" width="50" height="70" rx="3" fill="white" opacity="0.95"/>
+  
+  <!-- Document lines (text representation) -->
+  <line x1="82" y1="75" x2="118" y2="75" stroke="#3B82F6" stroke-width="2" stroke-linecap="round"/>
+  <line x1="82" y1="85" x2="118" y2="85" stroke="#3B82F6" stroke-width="2" stroke-linecap="round"/>
+  <line x1="82" y1="95" x2="110" y2="95" stroke="#3B82F6" stroke-width="2" stroke-linecap="round"/>
+  <line x1="82" y1="105" x2="118" y2="105" stroke="#3B82F6" stroke-width="2" stroke-linecap="round"/>
+  <line x1="82" y1="115" x2="115" y2="115" stroke="#3B82F6" stroke-width="2" stroke-linecap="round"/>
+  
+  <!-- Checkmark on document -->
+  <circle cx="100" cy="150" r="12" fill="#10B981"/>
+  <path d="M95 150 L98 153 L105 146" 
+        stroke="white" stroke-width="2.5" stroke-linecap="round" 
+        stroke-linejoin="round" fill="none"/>
+</svg>

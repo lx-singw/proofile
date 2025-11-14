@@ -43,10 +43,10 @@ export default function CreateProfilePage() {
         <div className="w-full max-w-2xl space-y-6" data-testid="create-profile-page">
           <div className="space-y-2">
             <h1 className="text-3xl font-semibold" data-testid="create-profile-heading">
-              Create your profile
+              Build Your Verified Resume
             </h1>
             <p className="text-muted-foreground">
-              Tell us about yourself so we can match you with the best opportunities.
+              Create a professional resume that stands out to employers.
             </p>
           </div>
           <CreateProfileForm />

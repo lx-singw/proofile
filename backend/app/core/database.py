@@ -1,4 +1,5 @@
 from typing import AsyncIterator
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.engine.url import make_url, URL
@@ -45,6 +46,7 @@ AsyncSessionLocal: sessionmaker[AsyncSession] = sessionmaker(
 async def get_db() -> AsyncIterator[AsyncSession]:
     async with AsyncSessionLocal() as session:
         try:
+            await session.execute(text("SET search_path TO public"))
             yield session
         finally:
             # Session context handles close; explicit block kept for clarity/extension

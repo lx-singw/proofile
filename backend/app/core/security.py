@@ -2,11 +2,21 @@
 Security-related utilities, including password hashing and JWT token creation.
 """
 from datetime import datetime, timedelta, timezone
-from passlib.context import CryptContext
-from jose import jwt, JWTError
-from pydantic import BaseModel, field_validator, ValidationError
-from app.core.config import settings
 import re
+from typing import Final
+
+import bcrypt
+from jose import jwt, JWTError
+from pydantic import BaseModel, ValidationError, field_validator
+
+from app.core.config import settings
+
+PASSWORD_MAX_BYTES: Final[int] = 72
+PASSWORD_TOO_LONG_MESSAGE: Final[str] = (
+    "Password must be 72 bytes or fewer. Use fewer or simpler characters."
+)
+BCRYPT_DEFAULT_ROUNDS: Final[int] = 12
+
 
 class PasswordValidator(BaseModel):
     password: str
@@ -16,9 +26,17 @@ class PasswordValidator(BaseModel):
         errors = []
         # Length checks first
         if len(v) < settings.PASSWORD_MIN_LENGTH:
-            errors.append(f"Password must be at least {settings.PASSWORD_MIN_LENGTH} characters long")
+            errors.append(
+                f"Password must be at least {settings.PASSWORD_MIN_LENGTH} characters long"
+            )
         if len(v) > settings.PASSWORD_MAX_LENGTH:
-            errors.append(f"Password must be less than {settings.PASSWORD_MAX_LENGTH} characters long")
+            errors.append(
+                f"Password must be less than {settings.PASSWORD_MAX_LENGTH} characters long"
+            )
+
+        # Enforce bcrypt byte limit explicitly to avoid runtime hashing errors
+        if len(v.encode("utf-8")) > PASSWORD_MAX_BYTES:
+            errors.append(PASSWORD_TOO_LONG_MESSAGE)
 
         # Check password complexity individually to match test expectations
         if settings.PASSWORD_REQUIRE_UPPERCASE and not any(c.isupper() for c in v):
@@ -29,19 +47,11 @@ class PasswordValidator(BaseModel):
             errors.append("Password must include numbers")
         if settings.PASSWORD_REQUIRE_SPECIAL and not re.search(r'[!@#$%^&*(),.?":{}|<>]', v):
             errors.append("Password must include special characters")
-        
+
         if errors:
             raise ValueError(", ".join(errors))
 
         return v
-
-# Use bcrypt for password hashing with stronger settings
-pwd_context = CryptContext(
-    schemes=["bcrypt"],
-    default="bcrypt",
-    bcrypt__rounds=12,  # 12 rounds is secure while still being reasonably fast
-    deprecated="auto"
-)
 
 def validate_password_strength(password: str) -> None:
     """Validate password strength with proper error handling."""
@@ -50,16 +60,47 @@ def validate_password_strength(password: str) -> None:
     except ValidationError as e:
         raise ValueError(e.errors()[0]["msg"])
 
+
+def _password_to_bytes(password: str) -> bytes:
+    password_bytes = password.encode("utf-8")
+    if len(password_bytes) > PASSWORD_MAX_BYTES:
+        raise ValueError(PASSWORD_TOO_LONG_MESSAGE)
+    return password_bytes
+
 ALGORITHM = "HS256"
 REFRESH_AUDIENCE = "proofile:refresh"
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    """Verifies a plain-text password against a hashed one."""
-    return pwd_context.verify(plain_password, hashed_password)
+    """Verifies a plain-text password against a hashed one using bcrypt."""
+    if not hashed_password:
+        return False
+
+    try:
+        password_bytes = _password_to_bytes(plain_password)
+        hashed_bytes = hashed_password.encode("utf-8")
+    except ValueError:
+        # Treat overlong passwords as invalid credentials rather than raising.
+        return False
+
+    try:
+        return bcrypt.checkpw(password_bytes, hashed_bytes)
+    except ValueError:
+        # bcrypt will raise if the hash format is invalid; surface as failure.
+        return False
+
 
 def get_password_hash(password: str) -> str:
-    """Hashes a plain-text password."""
-    return pwd_context.hash(password)
+    """Hashes a plain-text password using bcrypt with a fixed cost factor."""
+    password_bytes = _password_to_bytes(password)
+
+    try:
+        salt = bcrypt.gensalt(rounds=BCRYPT_DEFAULT_ROUNDS)
+        hashed = bcrypt.hashpw(password_bytes, salt)
+    except ValueError as exc:
+        # Normalize bcrypt's error message so callers can surface consistent feedback.
+        raise ValueError(PASSWORD_TOO_LONG_MESSAGE) from exc
+
+    return hashed.decode("utf-8")
 
 def create_access_token(
     data: dict,

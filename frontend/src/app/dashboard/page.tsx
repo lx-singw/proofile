@@ -84,31 +84,11 @@ export default function DashboardPage() {
     }
   }, [loading, user, router]);
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center p-8">
-        <p className="text-lg" aria-live="polite">
-          Loading your dashboard...
-        </p>
-      </div>
-    );
-  }
+  const displayName = user?.full_name || user?.username || user?.email || "there";
+  const createdAt = typeof user?.created_at === "string" ? new Date(user.created_at) : null;
+  const isNewUser = !profile?.id || (createdAt ? Date.now() - createdAt.getTime() < 5 * 24 * 60 * 60 * 1000 : false);
 
-  if (!user) {
-    return (
-      <div className="min-h-screen flex items-center justify-center p-8">
-        <p data-testid="unauthenticated-message" aria-live="polite">
-          Redirecting to login...
-        </p>
-      </div>
-    );
-  }
-
-  const displayName = user.full_name || user.username || user.email || "there";
-  const createdAt = typeof user.created_at === "string" ? new Date(user.created_at) : null;
-  const isNewUser = createdAt ? Date.now() - createdAt.getTime() < 5 * 24 * 60 * 60 * 1000 : false;
-
-  const seed = useMemo(() => createSeed(user.id as number | undefined, user.email, user.username), [user.email, user.id, user.username]);
+  const seed = useMemo(() => createSeed(user?.id as number | undefined, user?.email, user?.username), [user?.email, user?.id, user?.username]);
   const random = useMemo(() => createSeededRandom(seed), [seed]);
 
   const stats = useMemo(() => {
@@ -157,7 +137,7 @@ export default function DashboardPage() {
     const steps: CompletionStep[] = [
       {
         id: "headline",
-        label: "Add Headline",
+        label: "Add Professional Title",
         description: "Tell employers about your role and expertise",
         completed: Boolean(profile?.headline),
         href: "/profile/edit",
@@ -171,8 +151,8 @@ export default function DashboardPage() {
       },
       {
         id: "avatar",
-        label: "Upload Profile Photo",
-        description: "Profiles with photos get more views",
+        label: "Upload Photo",
+        description: "Resumes with photos get more views",
         completed: Boolean(profile?.avatar_url),
         href: "/profile/photo",
       },
@@ -208,7 +188,7 @@ export default function DashboardPage() {
       actions.push({
         id: "add-photo",
         title: "Add a Professional Photo",
-        description: "Profiles with photos are more likely to be viewed",
+        description: "Resumes with photos are more likely to be viewed",
         icon: <span role="img" aria-label="camera" className="text-lg">📸</span>,
         cta: "Upload Photo",
         href: "/profile/photo",
@@ -231,10 +211,10 @@ export default function DashboardPage() {
     actions.push(
       {
         id: "share-profile",
-        title: "Share Your Profile",
+        title: "Share Your Resume",
         description: "Increase visibility by sharing with your network",
         icon: <span role="img" aria-label="share" className="text-lg">🔗</span>,
-        cta: "Share Profile",
+        cta: "Share Resume",
         href: "/profile/share",
         priority: "medium",
       },
@@ -282,7 +262,7 @@ export default function DashboardPage() {
         type: "skill-added",
         actor: "You",
         title: "Added TypeScript to your skills",
-        description: "Your profile completeness improved",
+        description: "Your resume completeness improved",
         timestamp: makeTimestamp(56),
         href: "/profile/skills",
         read: true,
@@ -302,17 +282,41 @@ export default function DashboardPage() {
 
   const handleNavigate = (path: string) => () => router.push(path);
 
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-8">
+        <p className="text-lg" aria-live="polite">
+          Loading your dashboard...
+        </p>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-8">
+        <p data-testid="unauthenticated-message" aria-live="polite">
+          Redirecting to login...
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen flex flex-col bg-gray-50 dark:bg-slate-950">
       <DashboardHeader />
-      <main className="flex-1">
+      <main className="flex-1" role="main">
         <div className="mx-auto w-full max-w-6xl px-6 py-8 space-y-6">
-          <WelcomeBanner
-            userName={displayName}
-            isNewUser={isNewUser}
-            onCreateProfile={handleNavigate("/profile/create")}
-            onViewProfile={handleNavigate("/profile")}
-          />
+          <h1 className="sr-only">Dashboard</h1>
+          <div data-testid="profile-status-card">
+            <WelcomeBanner
+              userName={displayName}
+              isNewUser={isNewUser}
+              onCreateProfile={handleNavigate("/profile/create")}
+              onViewProfile={handleNavigate("/profile")}
+            />
+            <p className="sr-only">Signed in as {user.email}</p>
+          </div>
 
           <StatsCards
             profileViews={stats.profileViews}
@@ -323,7 +327,7 @@ export default function DashboardPage() {
 
           <div className="grid gap-6 lg:grid-cols-[2fr,1fr]">
             <ActivityGraph
-              title="Profile engagement (last 12 weeks)"
+              title="Resume engagement (last 12 weeks)"
               data={activityData}
             />
             <ProfileCompletion

@@ -21,6 +21,7 @@ from urllib.parse import urlparse
 from contextlib import asynccontextmanager
 from app.core import config, database
 from app.api.v1.api import api_router
+from app.core.http_client import close_client
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(levelname)s:     %(message)s')
@@ -88,6 +89,12 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             logger.error(f"Unexpected error closing Redis connection: {e}")
     await database.dispose_engine()
+    # Close module-level HTTP client (if initialized) to ensure clean shutdown
+    try:
+        await close_client()
+        logger.info("HTTP client closed.")
+    except Exception as e:
+        logger.warning(f"Error closing HTTP client: {e}")
 
 # Security headers middleware
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
@@ -147,6 +154,7 @@ app.add_middleware(
         "Accept",
         "Origin",
         "X-Requested-With",
+        "X-XSRF-TOKEN",
     ],
     expose_headers=["*"],
     max_age=86400,

@@ -1,48 +1,57 @@
 import { NextRequest, NextResponse } from "next/server";
 
-const BACKEND_URL = process.env.BACKEND_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const BACKEND_URL = process.env.BACKEND_INTERNAL_URL || "http://backend:8000";
 
 async function proxyToBackend(path: string, req: NextRequest, method = "GET") {
+  const allowedPaths = ["/api/v1/auth/refresh", "/api/v1/auth/csrf"];
+  if (!allowedPaths.includes(path)) {
+    throw new Error("Invalid path");
+  }
   const url = `${BACKEND_URL}${path}`;
 
   const headers: Record<string, string> = {};
-  // Forward incoming cookie header to backend so backend can read session cookies
   const cookie = req.headers.get("cookie");
   if (cookie) headers["cookie"] = cookie;
 
-  // Forward content-type if present
   const contentType = req.headers.get("content-type");
   if (contentType) headers["content-type"] = contentType;
 
   const init: RequestInit = {
     method,
     headers,
-    // forward body where applicable
     body: method === "GET" ? undefined : await req.text(),
-    // server-side fetch will include system-level cookies if needed
   };
 
-  const res = await fetch(url, init);
+  const res = await fetch(url, {
+    ...init,
+    redirect: 'manual',
+    signal: AbortSignal.timeout(5000)
+  });
+  
+  if (!res.ok && res.status >= 500) {
+    throw new Error(`Backend error: ${res.status}`);
+  }
+  
   const bodyText = await res.text();
 
-  // Collect any set-cookie headers from backend response to forward to client
   const setCookie: string[] = [];
-  // Node fetch/Next fetch may expose multiple Set-Cookie headers under raw headers
-  // but the portable way is to iterate headers entries
-  for (const [k, v] of res.headers.entries()) {
-    if (k.toLowerCase() === "set-cookie") {
-      setCookie.push(v);
+  try {
+    for (const [k, v] of res.headers.entries()) {
+      if (k.toLowerCase() === "set-cookie") {
+        setCookie.push(v);
+      }
     }
+  } catch {
+    // Ignore header iteration errors
   }
 
-  const responseHeaders: Record<string, string> = {
-    "content-type": res.headers.get("content-type") || "text/plain",
-  };
-  // If backend returned set-cookie headers, forward them
+  const responseHeaders: Record<string, string> = {};
+  const responseContentType = res.headers.get("content-type");
+  if (responseContentType) {
+    responseHeaders["content-type"] = responseContentType;
+  }
+  
   if (setCookie.length > 0) {
-    // Next.js supports setting multiple Set-Cookie headers by repeating header
-    // but NextResponse.json only accepts a single headers object. We join them with '\n'
-    // and set in raw response below.
     responseHeaders["set-cookie"] = setCookie.join("\n");
   }
 
@@ -50,15 +59,16 @@ async function proxyToBackend(path: string, req: NextRequest, method = "GET") {
 }
 
 export async function POST(req: NextRequest) {
-  // Proxy refresh request to backend: POST /api/v1/auth/refresh
   try {
     const { status, bodyText, headers } = await proxyToBackend("/api/v1/auth/refresh", req, "POST");
-    const res = NextResponse.json(
-      bodyText ? JSON.parse(bodyText) : { ok: true },
-      { status, headers }
-    );
+    let jsonBody;
+    try {
+      jsonBody = bodyText ? JSON.parse(bodyText) : { ok: true };
+    } catch {
+      return NextResponse.json({ error: "Invalid JSON response" }, { status: 502 });
+    }
+    const res = NextResponse.json(jsonBody, { status, headers });
 
-    // If we have multiple Set-Cookie values joined by newline, split and append each
     const rawSetCookie = headers["set-cookie"];
     if (rawSetCookie) {
       const cookies = rawSetCookie.split("\n");
@@ -75,13 +85,15 @@ export async function POST(req: NextRequest) {
 }
 
 export async function GET(req: NextRequest) {
-  // Proxy a CSRF token fetch endpoint for local dev: GET /api/v1/auth/csrf
   try {
     const { status, bodyText, headers } = await proxyToBackend("/api/v1/auth/csrf", req, "GET");
-    const res = NextResponse.json(
-      bodyText ? JSON.parse(bodyText) : { ok: true },
-      { status, headers }
-    );
+    let jsonBody;
+    try {
+      jsonBody = bodyText ? JSON.parse(bodyText) : { ok: true };
+    } catch {
+      return NextResponse.json({ error: "Invalid JSON response" }, { status: 502 });
+    }
+    const res = NextResponse.json(jsonBody, { status, headers });
 
     const rawSetCookie = headers["set-cookie"];
     if (rawSetCookie) {

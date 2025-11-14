@@ -44,23 +44,60 @@ async def create_user(
         )
 
 @router.post("", response_model=schemas.UserRead, status_code=status.HTTP_201_CREATED)
-async def create_user_endpoint(user_in: schemas.UserCreate, db: AsyncSession = Depends(deps.get_db)):
-    return await create_user(db=db, user_in=user_in)
+async def create_user_endpoint(
+    user_in: schemas.UserCreate, db: AsyncSession = Depends(deps.get_db)
+):
+    """
+    Create a new user.
+    """
+    try:
+        user_data = user_in.model_dump()
+        user_data.pop("role", None)
+        sanitized = schemas.UserCreate(**user_data)
+        user = await user_service.create_user(db=db, user_in=sanitized)
+        return user
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="A user with this email already exists.",
+        )
+    except ValueError as e:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).exception("User creation failed: %s", e)
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"An unexpected error occurred: {e}",
+        )
 
 @router.get("/me", response_model=schemas.UserRead)
-async def read_current_user(current_user: schemas.UserRead = Depends(deps.get_current_active_user)):
+async def read_current_user(current_user = Depends(deps.get_current_active_user)):
     """Return the currently authenticated user's details.
 
     This provides a stable /api/v1/users/me endpoint for frontend authService probes.
     """
-    return current_user
+    return {
+        "id": current_user.id,
+        "email": current_user.email,
+        "full_name": current_user.full_name,
+        "role": current_user.role,
+        "is_active": current_user.is_active,
+        "created_at": None,
+    }
 
 @router.patch("/{user_id}", response_model=schemas.UserRead)
 async def update_user(
     user_id: int,
     user_in: schemas.UserUpdate,
     db: AsyncSession = Depends(deps.get_db),
-    current_user: schemas.UserRead = Depends(deps.get_current_active_user),
+    current_user = Depends(deps.get_current_active_user),
 ):
     """
     Update a user's details. Only accessible by admins.

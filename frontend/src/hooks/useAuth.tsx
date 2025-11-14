@@ -31,20 +31,9 @@ const AuthState: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 
     const bootstrap = async () => {
       try {
-        const existingToken = hydrateAccessTokenFromStorage();
-        // Only attempt refresh if we DON'T have a token in storage
-        // (meaning the browser might have a valid refresh token in cookies)
-        if (!existingToken) {
-          try {
-            await authService.refresh();
-          } catch (refreshErr) {
-            if (process.env.NODE_ENV !== "production") {
-              console.log("[auth] No valid session, user is logged out");
-            }
-            // This is expected when user is logged out - don't warn
-            clearAccessToken();
-          }
-        }
+        // Hydrate token from storage, but that's it.
+        // The query for 'me' will determine if the session is valid.
+        hydrateAccessTokenFromStorage();
       } catch (err) {
         if (process.env.NODE_ENV !== "production") {
           console.warn("[auth] bootstrap failed", err);
@@ -112,7 +101,9 @@ const AuthState: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     } finally {
       queryClient.setQueryData(ME_QUERY_KEY, null);
       clearAccessToken();
-      router.push("/home");
+      setTimeout(() => {
+        router.push("/login");
+      }, 100);
     }
   };
 
@@ -122,17 +113,15 @@ const AuthState: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 
   const isLoading = bootstrapping || (loading && user !== null);
 
-  if (isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <p>Loading...</p>
-      </div>
-    );
-  }
-
   return (
     <AuthContext.Provider value={{ user: user ?? null, loading: isLoading, login, register, logout, refresh }}>
-      {children}
+      {isLoading ? (
+        <div className="min-h-screen flex items-center justify-center">
+          <p>Loading...</p>
+        </div>
+      ) : (
+        children
+      )}
     </AuthContext.Provider>
   );
 };

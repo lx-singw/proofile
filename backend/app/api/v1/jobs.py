@@ -15,7 +15,7 @@ router = APIRouter()
 async def create_job(
     job_in: JobCreate,
     db: AsyncSession = Depends(deps.get_db),
-    current_user: User = Depends(deps.get_current_active_user),
+    current_user = Depends(deps.get_current_active_user),
 ):
     """
     Create a new job posting. Only accessible by users with the 'employer' role.

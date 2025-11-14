@@ -43,7 +43,7 @@ export default function DashboardHeader({
     <>
       {/* Main Header */}
       <header className="border-b border-gray-200 bg-white sticky top-0 z-40 dark:border-gray-700 dark:bg-gray-900">
-        <div className="flex items-center justify-between px-4 sm:px-6 lg:px-8 py-4 max-w-7xl mx-auto w-full">
+        <nav className="flex items-center justify-between px-4 sm:px-6 lg:px-8 py-4 max-w-7xl mx-auto w-full" role="navigation" aria-label="Main navigation">
           {/* Left Section: Logo & Mobile Menu */}
           <div className="flex items-center gap-4">
             <MobileMenu
@@ -107,14 +107,15 @@ export default function DashboardHeader({
                 },
               ]}
               align="right"
-              onItemClick={(item) => {
+              onItemClick={async (item, event) => {
                 if (item.label === "Sign Out") {
-                  handleLogout();
+                  event?.preventDefault();
+                  await handleLogout();
                 }
               }}
             />
           </div>
-        </div>
+        </nav>
       </header>
 
       {/* Mobile Drawer */}

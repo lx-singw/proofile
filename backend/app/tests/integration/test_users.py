@@ -84,3 +84,23 @@ async def test_create_user_password_too_long(client: AsyncClient):
     error_detail = response.json()["detail"][0]
     assert error_detail["type"] == "value_error"
     assert "Password must be less than 72 characters long" in error_detail["msg"]
+
+
+async def test_create_user_password_too_many_bytes(client: AsyncClient):
+    """
+    Test user creation with a password that exceeds the 72-byte bcrypt limit.
+    """
+    unique_email = f"passwordtest_{uuid.uuid4().hex[:8]}@example.com"
+    multi_byte_password = "ä" * 40  # 40 characters but 80 bytes in UTF-8
+    user_data = {
+        "email": unique_email,
+        "password": multi_byte_password,
+        "full_name": "Password Test",
+    }
+
+    response = await client.post("/api/v1/users", json=user_data)
+
+    assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+    error_detail = response.json()["detail"][0]
+    assert error_detail["type"] == "value_error"
+    assert "72 bytes" in error_detail["msg"]

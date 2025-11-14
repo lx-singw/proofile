@@ -62,20 +62,21 @@ describe("ProfileSummaryCard", () => {
 
   it("renders action buttons", () => {
     render(<ProfileSummaryCard user={mockUser} profile={mockProfile} />);
-    expect(screen.getByText("Edit Profile")).toBeInTheDocument();
-    expect(screen.getByText("Share")).toBeInTheDocument();
-    expect(screen.getByText("View Profile")).toBeInTheDocument();
+    // UI copy changed to "Resume" in this app — tests updated to match.
+    expect(screen.getByText("Edit Resume")).toBeInTheDocument();
+    expect(screen.getByText("Share Resume")).toBeInTheDocument();
+    expect(screen.getByText("View Resume")).toBeInTheDocument();
   });
 
   it("renders edit profile link with correct href", () => {
     render(<ProfileSummaryCard user={mockUser} profile={mockProfile} />);
-    const editLink = screen.getByText("Edit Profile").closest("a");
+    const editLink = screen.getByText("Edit Resume").closest("a");
     expect(editLink).toHaveAttribute("href", "/profile/edit");
   });
 
   it("renders view profile link with correct href", () => {
     render(<ProfileSummaryCard user={mockUser} profile={mockProfile} />);
-    const viewLink = screen.getByText("View Profile").closest("a");
+    const viewLink = screen.getByText("View Resume").closest("a");
     expect(viewLink).toHaveAttribute("href", "/profile");
   });
 
@@ -94,8 +95,9 @@ describe("ProfileSummaryCard", () => {
   it("defaults to 0% completion", () => {
     render(<ProfileSummaryCard user={mockUser} profile={mockProfile} />);
     // If completionPercentage is not provided, it defaults to 0
+    // The progress bar label text is now "Resume Complete" in the UI
     // The progress bar should exist but be minimal
-    const progressBar = screen.getByText("Profile Complete").closest("div");
+    const progressBar = screen.getByText("Resume Complete").closest("div");
     expect(progressBar).toBeInTheDocument();
   });
 

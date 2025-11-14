@@ -125,6 +125,20 @@ describe("RegistrationForm", () => {
     expect(await screen.findByText(/email already in use\. log in instead\./i)).toBeInTheDocument();
     expect(toastMock.error).not.toHaveBeenCalled();
   });
+
+  it("blocks passwords longer than 72 bytes", async () => {
+    render(<RegistrationForm />);
+    const user = userEvent.setup();
+
+  const longPassword = `ValidPass123!${"é".repeat(40)}`;
+
+    await user.type(screen.getByLabelText("Email"), "bytes@example.com");
+    await user.type(screen.getByLabelText("Password"), longPassword);
+    await user.click(screen.getByRole("button", { name: /create account/i }));
+
+    expect(await screen.findByText(/72 bytes or fewer/i)).toBeInTheDocument();
+    expect(registerMock).not.toHaveBeenCalled();
+  });
 });
 
 describe("registrationSchema", () => {
@@ -147,5 +161,18 @@ describe("registrationSchema", () => {
     });
 
     expect(result.success).toBe(true);
+  });
+
+  it("rejects passwords over 72 bytes", () => {
+    const longPassword = "π".repeat(37); // 74 bytes (2 bytes per char)
+    const result = registrationSchema.safeParse({
+      email: "byte-check@example.com",
+      password: longPassword,
+    });
+
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues.some((issue) => issue.message.includes("72 bytes"))).toBe(true);
+    }
   });
 });

@@ -27,7 +27,7 @@ export default function ProfilePage() {
   if (loading || profileLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center p-8" data-testid="profile-loading">
-        <p className="text-muted-foreground">Loading your profile...</p>
+        <p className="text-muted-foreground">Loading your resume...</p>
       </div>
     );
   }

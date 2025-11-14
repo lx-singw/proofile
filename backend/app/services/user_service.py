@@ -4,6 +4,9 @@ Service layer for user-related operations.
 This encapsulates the business logic for creating, retrieving,
 and managing users, separating it from the API endpoints.
 """
+import logging
+import traceback
+from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
@@ -49,8 +52,20 @@ async def create_user(db: AsyncSession, user_in: UserCreate) -> User:
     except IntegrityError:
         await db.rollback()
         raise
+    except ValueError:
+        await db.rollback()
+        raise
     except Exception as e:
         await db.rollback()
+        try:
+            search_path = await db.execute(text("SHOW search_path"))
+            logging.getLogger(__name__).error("Current search_path: %s", search_path.scalar())
+        except Exception:
+            logging.getLogger(__name__).exception("Failed to inspect search_path after user create error")
+        logging.getLogger(__name__).error("User creation failed with %s", repr(e))
+        logging.getLogger(__name__).debug("User creation traceback:\n%s", traceback.format_exc())
+        print("USER_CREATE_ERR:", repr(e), flush=True)
+        print("USER_CREATE_TRACE:", traceback.format_exc(), flush=True)
         raise RuntimeError(f"Failed to create user: {e}") from e
  
 async def update_user(db: AsyncSession, user: User, user_in: UserUpdate) -> User:
@@ -72,6 +87,9 @@ async def update_user(db: AsyncSession, user: User, user_in: UserUpdate) -> User
         await db.refresh(user)
         return user
     except IntegrityError:
+        await db.rollback()
+        raise
+    except ValueError:
         await db.rollback()
         raise
     except Exception as e:

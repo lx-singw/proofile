@@ -1,34 +1,17 @@
 import axios, { AxiosHeaders, type AxiosRequestConfig } from "axios";
 
-// Prefer relative '/api' which is proxied to the backend via next.config rewrites in dev/E2E.
-// This ensures cookies/CSRF tokens stay on the frontend origin and work through the proxy.
-// Only use NEXT_PUBLIC_API_URL in production when it's a different domain.
-const rawEnvUrl = process.env.NEXT_PUBLIC_API_URL;
+// Turbopack currently struggles with proxying API requests in development.
+// Default to the direct backend URL exposed via NEXT_PUBLIC_API_URL and only
+// fall back to relative paths if that variable is absent.
+const envApiUrl = process.env.NEXT_PUBLIC_API_URL?.trim();
 
-// Compute the API URL dynamically to ensure it uses the correct value on the client
-function getApiUrl(): string {
-  // Only check window on client side
-  if (typeof window === "undefined") {
-    return "";  // Default to relative '/api' proxy for SSR
+function resolveBaseUrl(): string {
+  if (envApiUrl) {
+    return envApiUrl;
   }
-
-  if (rawEnvUrl) {
-    try {
-      // Check if the provided URL points to a different hostname than current
-      const envHost = new URL(rawEnvUrl).hostname;
-      const currentHost = window.location.hostname;
-      // Only use absolute URL if it's a different domain
-      if (envHost !== currentHost && envHost !== "localhost" && envHost !== "127.0.0.1") {
-        console.log("[api] Using absolute URL:", rawEnvUrl);
-        return rawEnvUrl;
-      }
-    } catch (e) {
-      // ignore URL parse errors; keep relative path default
-      console.log("[api] Could not parse NEXT_PUBLIC_API_URL, using proxy /api");
-    }
+  if (typeof window !== "undefined") {
+    return window.location.origin;
   }
-
-  console.log("[api] Using relative proxy /api");
   return "";
 }
 
@@ -59,6 +42,7 @@ const persistToken = (token: string | null) => {
 // Create axios instances - baseURL will be set dynamically on first client request
 // Don't set baseURL here to avoid SSR issues
 export const api = axios.create({
+  baseURL: resolveBaseUrl(),
   withCredentials: true,
   headers: {
     "Content-Type": "application/json",
@@ -115,9 +99,12 @@ export function clearAccessToken() {
 // --------------------
 api.interceptors.request.use((config) => {
   try {
-    // Set baseURL dynamically on each request to ensure it's correct on client side
-    if (typeof window !== "undefined" && !config.baseURL) {
-      config.baseURL = getApiUrl();
+    // Ensure baseURL is set; fall back to direct backend URL when missing.
+    if (!config.baseURL) {
+      const resolved = api.defaults.baseURL || resolveBaseUrl();
+      if (resolved) {
+        config.baseURL = resolved;
+      }
     }
 
     const url = (config.url ?? "").toString();
@@ -147,11 +134,16 @@ export async function apiRequest<T = unknown>(config: AxiosRequestConfig): Promi
     if (process.env.NODE_ENV !== "production") {
       console.log("[apiRequest]", config.method?.toUpperCase(), config.url, { baseURL: api.defaults.baseURL });
     }
-    const resp = await api.request<T>(config);
+  const resp = await api.request<T>(config);
     return resp.data;
   } catch (error) {
+    // In dev, log the error unless it's a 401 or 404, which are expected
     if (process.env.NODE_ENV !== "production") {
-      console.error("[apiRequest] error:", config.url, error);
+      if (axios.isAxiosError(error) && error.response?.status !== 401 && error.response?.status !== 404) {
+        console.error("[apiRequest] error:", config.url, error);
+      } else if (!axios.isAxiosError(error)) {
+        console.error("[apiRequest] non-axios error:", config.url, error);
+      }
     }
     // Normalize Axios errors to throw helpful objects
     if (axios.isAxiosError(error) && error.response?.data !== undefined) {
@@ -238,6 +230,8 @@ api.interceptors.response.use(
         "/api/v1/auth/refresh",
         {}, // No data in body
         {
+          baseURL: api.defaults.baseURL || resolveBaseUrl(),
+          withCredentials: true,
           headers: {
             ...(xsrfToken ? { "X-XSRF-TOKEN": xsrfToken } : {}),
           },
@@ -270,3 +264,4 @@ api.interceptors.response.use(
 );
 
 export default api;
+

@@ -1,0 +1,50 @@
+name: Integration tests (docker-compose)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+
+jobs:
+  integration-compose:
+    runs-on: ubuntu-latest
+    services:
+      docker:
+        image: docker:24-dind
+        privileged: true
+        options: --privileged
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Set up Docker Compose
+        uses: docker/setup-qemu-action@v2
+
+      - name: Bring up compose
+        run: |
+          docker compose up -d --build
+
+      - name: Wait for services
+        run: |
+          # Wait for backend and frontend to respond on internal hostnames
+          for i in {1..30}; do
+            nc -z backend 8000 && nc -z frontend 3000 && break || sleep 2
+          done
+
+      - name: Run frontend tests inside frontend container
+        run: |
+          docker compose exec frontend sh -lc "cd /app && npm ci && npm run test:ci"
+        env:
+          BACKEND_INTERNAL_URL: http://backend:8000
+          FRONTEND_INTERNAL_URL: http://frontend:3000
+
+      - name: Run backend integration tests inside backend container
+        run: |
+          docker compose exec backend sh -lc "cd /app && poetry run pytest -q"
+        env:
+          BACKEND_INTERNAL_URL: http://backend:8000
+          FRONTEND_INTERNAL_URL: http://frontend:3000

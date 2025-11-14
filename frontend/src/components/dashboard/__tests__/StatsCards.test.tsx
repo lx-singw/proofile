@@ -18,7 +18,8 @@ describe("StatsCards", () => {
   it("displays profile views stat", () => {
     render(<StatsCards {...defaultProps} />);
     expect(screen.getByText("42")).toBeInTheDocument();
-    expect(screen.getByText("Profile Views")).toBeInTheDocument();
+  // UI copy uses "Resume Views"
+  expect(screen.getByText("Resume Views")).toBeInTheDocument();
   });
 
   it("displays endorsements stat", () => {
@@ -30,7 +31,8 @@ describe("StatsCards", () => {
   it("displays verifications stat", () => {
     render(<StatsCards {...defaultProps} />);
     expect(screen.getByText("8")).toBeInTheDocument();
-    expect(screen.getByText("Verifications")).toBeInTheDocument();
+  // UI copy uses "Verified Items"
+  expect(screen.getByText("Verified Items")).toBeInTheDocument();
   });
 
   it("displays zero values correctly", () => {

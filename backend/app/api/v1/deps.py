@@ -35,6 +35,22 @@ class CachedUser:
 
 _token_cache: dict[str, tuple[CachedUser, float]] = {}
 _token_locks: dict[str, asyncio.Lock] = {}
+_MAX_CACHE_SIZE = 1000
+
+def _evict_expired_cache_entries():
+    """Remove expired entries to prevent unbounded cache growth."""
+    now = time.monotonic()
+    expired = [token for token, (_, expires_at) in _token_cache.items() if expires_at <= now]
+    for token in expired:
+        _token_cache.pop(token, None)
+        _token_locks.pop(token, None)
+    
+    # If still too large, remove oldest entries
+    if len(_token_cache) > _MAX_CACHE_SIZE:
+        sorted_entries = sorted(_token_cache.items(), key=lambda x: x[1][1])
+        for token, _ in sorted_entries[:len(_token_cache) - _MAX_CACHE_SIZE]:
+            _token_cache.pop(token, None)
+            _token_locks.pop(token, None)
 
 # --- OAuth2 Scheme ---
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/token")
@@ -44,6 +60,10 @@ async def get_current_user(
     token: str = Depends(oauth2_scheme),
     db: AsyncSession = Depends(get_db)
 ) -> CachedUser:
+    # Periodically clean up expired entries
+    if len(_token_cache) > _MAX_CACHE_SIZE * 0.8:
+        _evict_expired_cache_entries()
+    
     lock = _token_locks.setdefault(token, asyncio.Lock())
     async with lock:
         now = time.monotonic()
@@ -53,6 +73,7 @@ async def get_current_user(
             if expires_at > now:
                 return replace(cached_user)
             _token_cache.pop(token, None)
+            _token_locks.pop(token, None)
 
         credentials_exception = HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -100,7 +121,9 @@ async def get_current_user(
         _token_cache[token] = (cached_user, now + _CACHE_TTL_SECONDS)
         return replace(cached_user)
 
-def get_current_active_user(current_user: CachedUser = Depends(get_current_user)) -> CachedUser:
+async def get_current_active_user(
+    current_user: CachedUser = Depends(get_current_user)
+) -> CachedUser:
     if not current_user.is_active:
         raise HTTPException(status_code=400, detail="Inactive user")
     return current_user
